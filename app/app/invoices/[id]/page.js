@@ -171,9 +171,10 @@ export default function InvoiceDetailsPage() {
     try {
       setLoading(true);
       setError('');
+      const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
       const [invResponse, collegeResponse] = await Promise.all([
         api.get(`${INVOICE_BASE}/${invoiceId}`, {}, true),
-        api.get(`/colleges/${user.college}`, {}, true).catch(() => ({ data: null })),
+        api.get(`/colleges/${collegeId}`, {}, true).catch(() => ({ data: null })),
       ]);
       const data = invResponse?.data || invResponse;
       setInvoice(data);

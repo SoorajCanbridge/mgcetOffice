@@ -89,6 +89,14 @@ const formatDateForDisplay = (date) => {
 
 const getCourseId = (course) => course._id || course.id;
 
+const normalizeCollegeId = (college) => {
+  if (!college) return '';
+  if (typeof college === 'object') {
+    return college._id || college.id || '';
+  }
+  return String(college);
+};
+
 export default function CoursesPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -110,7 +118,8 @@ export default function CoursesPage() {
   const fetchLevelLabels = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get(`/academic/config/${user.college}`);
+      const collegeId = normalizeCollegeId(user.college);
+      const response = await api.get(`/academic/config/${collegeId}`);
       const config = response?.data || response || {};
       setLevelLabels(normalizeLevelLabels(config.levelNames));
       setLevelValues(normalizeLevelValues(config.levelValues));
@@ -124,7 +133,8 @@ export default function CoursesPage() {
   const fetchStaff = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get(`/teachers?college=${user.college}&staffType=teaching`, {}, true);
+      const collegeId = normalizeCollegeId(user.college);
+      const response = await api.get(`/teachers?college=${collegeId}&staffType=teaching`, {}, true);
       const data = response?.data || response || [];
       // Filter to only teaching staff
       const teachingStaff = Array.isArray(data) ? data.filter(s => s.staffType === 'teaching') : [];
@@ -140,7 +150,8 @@ export default function CoursesPage() {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get(`/academic/courses?collegeId=${user.college}`, {}, true);
+      const collegeId = normalizeCollegeId(user.college);
+      const response = await api.get(`/academic/courses?collegeId=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {

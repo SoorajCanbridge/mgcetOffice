@@ -40,7 +40,8 @@ export function AppHeader() {
 
   useEffect(() => {
     if (!user?.college) return
-    api.get(`/colleges/${user.college}`, {}, true).then((res) => {
+    const collegeId = typeof user.college === "object" ? (user.college._id || user.college.id || "") : String(user.college)
+    api.get(`/colleges/${collegeId}`, {}, true).then((res) => {
       const data = res?.data || res
       if (data) setCollege(data)
     }).catch(() => {})

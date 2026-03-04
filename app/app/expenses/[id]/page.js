@@ -82,9 +82,10 @@ export default function ExpenseDetailsPage() {
     try {
       setLoading(true);
       setError('');
+      const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
       const [expenseResponse, collegeResponse] = await Promise.all([
         api.get(`${EXPENSES_BASE}/${expenseId}`, {}, true),
-        api.get(`/colleges/${user.college}`, {}, true).catch(() => ({ data: null })),
+        api.get(`/colleges/${collegeId}`, {}, true).catch(() => ({ data: null })),
       ]);
       const data = expenseResponse?.data || expenseResponse;
       setExpense(data);

@@ -184,9 +184,10 @@ export default function PaymentDetailsPage() {
     try {
       setLoading(true);
       setError('');
+      const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
       const [payResponse, collegeResponse] = await Promise.all([
         api.get(`${PAYMENTS_BASE}/${paymentId}`, {}, true),
-        api.get(`/colleges/${user.college}`, {}, true).catch(() => ({ data: null })),
+        api.get(`/colleges/${collegeId}`, {}, true).catch(() => ({ data: null })),
       ]);
       const data = payResponse?.data || payResponse;
       setPayment(data);

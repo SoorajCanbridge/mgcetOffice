@@ -103,7 +103,8 @@ export default function StaffPage() {
   const fetchCourses = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get(`/academic/courses?college=${user.college}`, {}, true);
+      const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
+      const response = await api.get(`/academic/courses?college=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {

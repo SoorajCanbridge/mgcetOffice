@@ -193,11 +193,20 @@ export default function InvoicePaymentsPage() {
   const [success, setSuccess] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
 
+  const normalizeCollegeId = (college) => {
+    if (!college) return '';
+    if (typeof college === 'object') {
+      return college._id || college.id || '';
+    }
+    return String(college);
+  };
+
   // Fetch courses
   const fetchCourses = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get(`/academic/courses?college=${user.college}`, {}, true);
+      const collegeId = normalizeCollegeId(user.college);
+      const response = await api.get(`/academic/courses?college=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {

@@ -144,12 +144,21 @@ export default function StaffForm({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef(null);
 
+  const normalizeCollegeId = (college) => {
+    if (!college) return '';
+    if (typeof college === 'object') {
+      return college._id || college.id || '';
+    }
+    return String(college);
+  };
+
   // Fetch reporting managers (non-teaching staff) when staffType is non-teaching
   useEffect(() => {
     if (formData.staffType === 'non-teaching' && user?.college) {
       const fetchReportingManagers = async () => {
         try {
-          const response = await api.get(`/teachers?college=${user.college}&staffType=non-teaching&limit=1000`, {}, true);
+          const collegeId = normalizeCollegeId(user.college);
+          const response = await api.get(`/teachers?college=${collegeId}&staffType=non-teaching&limit=1000`, {}, true);
           const data = response?.data || response || [];
           setReportingToOptions(Array.isArray(data) ? data : []);
         } catch (err) {

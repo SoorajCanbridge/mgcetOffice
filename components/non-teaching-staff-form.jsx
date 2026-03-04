@@ -131,12 +131,21 @@ export default function NonTeachingStaffForm({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef(null);
 
+  const normalizeCollegeId = (college) => {
+    if (!college) return '';
+    if (typeof college === 'object') {
+      return college._id || college.id || '';
+    }
+    return String(college);
+  };
+
   // Fetch reporting managers (non-teaching staff) for reportingTo dropdown
   useEffect(() => {
     if (user?.college) {
       const fetchReportingManagers = async () => {
         try {
-          const response = await api.get(`/staff?college=${user.college}&staffType=non-teaching&limit=1000`, {}, true);
+          const collegeId = normalizeCollegeId(user.college);
+          const response = await api.get(`/staff?college=${collegeId}&staffType=non-teaching&limit=1000`, {}, true);
           const data = response?.data || response || [];
           // Exclude current staff if editing
           const filtered = editingStaff
