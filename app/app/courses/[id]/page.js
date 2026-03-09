@@ -162,6 +162,14 @@ export default function CourseDetailsPage() {
   const [promoteError, setPromoteError] = useState('');
   const [promoteSuccess, setPromoteSuccess] = useState('');
 
+  const normalizeCollegeId = (college) => {
+    if (!college) return '';
+    if (typeof college === 'object') {
+      return college._id || college.id || '';
+    }
+    return String(college);
+  };
+
   const fetchCourseDetails = useCallback(async () => {
     if (!courseId || !user?.college) return;
     try {
@@ -173,7 +181,8 @@ export default function CourseDetailsPage() {
 
       // Fetch level labels and values
       try {
-        const configResponse = await api.get(`/academic/config/${user.college}`);
+        const collegeId = normalizeCollegeId(user.college);
+        const configResponse = await api.get(`/academic/config/${collegeId}`);
         const config = configResponse?.data || configResponse || {};
         setLevelLabels(normalizeLevelLabels(config.levelNames));
         setLevelValues(normalizeLevelValues(config.levelValues));
@@ -545,7 +554,8 @@ export default function CourseDetailsPage() {
     }
 
     try {
-      const configResponse = await api.get(`/academic/config/${user.college}`);
+      const collegeId = normalizeCollegeId(user.college);
+      const configResponse = await api.get(`/academic/config/${collegeId}`);
       const config = configResponse?.data || configResponse || {};
       
       if (!config.levelValues || !config.levelValues.C) {

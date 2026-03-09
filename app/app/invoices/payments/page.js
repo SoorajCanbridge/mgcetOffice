@@ -206,7 +206,7 @@ export default function InvoicePaymentsPage() {
     if (!user?.college) return;
     try {
       const collegeId = normalizeCollegeId(user.college);
-      const response = await api.get(`/academic/courses?college=${collegeId}`, {}, true);
+      const response = await api.get(`/academic/courses?collegeId=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -218,7 +218,8 @@ export default function InvoicePaymentsPage() {
   const fetchLevelLabels = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get(`/academic/config/${user.college}`);
+      const collegeId = normalizeCollegeId(user.college);
+      const response = await api.get(`/academic/config/${collegeId}`);
       const config = response?.data || response || {};
       setLevelLabels(normalizeLevelLabels(config.levelNames));
       setLevelValues(normalizeLevelValues(config.levelValues));

@@ -180,7 +180,7 @@ export default function StudentsPage() {
     if (!user?.college) return;
     try {
       const collegeId = normalizeCollegeId(user.college);
-      const response = await api.get(`/academic/courses?college=${collegeId}`, {}, true);
+      const response = await api.get(`/academic/courses?collegeId=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -354,7 +354,7 @@ export default function StudentsPage() {
             }
           : undefined,
         isActive: !!formData.isActive,
-        college: user.college,
+        college: user.college._id,
       };
 
       let imagePath = formData.photo || '';

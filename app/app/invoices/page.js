@@ -272,7 +272,8 @@ export default function InvoicesPage() {
   const fetchLevelLabels = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get(`/academic/config/${user.college}`);
+      const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
+      const response = await api.get(`/academic/config/${collegeId}`);
       const config = response?.data || response || {};
       setLevelLabels(normalizeLevelLabels(config.levelNames));
       setLevelValues(normalizeLevelValues(config.levelValues));

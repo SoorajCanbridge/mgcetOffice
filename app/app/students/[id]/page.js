@@ -122,7 +122,7 @@ export default function StudentDetailsPage() {
     if (!user?.college) return;
     try {
       const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
-      const response = await api.get(`/academic/courses?college=${collegeId}`, {}, true);
+      const response = await api.get(`/academic/courses?collegeId=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -361,7 +361,7 @@ export default function StudentDetailsPage() {
             }
           : undefined,
         isActive: !!formData.isActive,
-        college: user.college,
+        college: user.college._id,
       };
 
       await api.put(`/students/${studentId}`, payload, {}, true);
