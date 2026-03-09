@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 
 const LEDGERS_BASE = '/finance/ledgers';
@@ -625,47 +626,54 @@ export default function LedgersPage() {
   ], []);
 
   // Define actions for Ledgers DataTable
-  const ledgerActions = useCallback((row) => (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleViewLedger(row._id);
-        }}
-      >
-        <Eye className="h-4 w-4" />
-        View
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEditLedger(row);
-        }}
-      >
-        <Edit2 className="h-4 w-4" />
-        Edit
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDeleteLedger(row);
-        }}
-        disabled={deletingId === row._id}
-      >
-        <Trash2 className="h-4 w-4" />
-        {deletingId === row._id ? 'Deleting...' : 'Delete'}
-      </Button>
-    </div>
-  ), [deletingId]);
+  const ledgerActions = useCallback(
+    (row) => (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewLedger(row._id);
+          }}
+        >
+          <Eye className="h-4 w-4" />
+          View
+        </Button>
+        <PermissionGate moduleKey="ledgers" action="edit">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditLedger(row);
+            }}
+          >
+            <Edit2 className="h-4 w-4" />
+            Edit
+          </Button>
+        </PermissionGate>
+        <PermissionGate moduleKey="ledgers" action="delete">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteLedger(row);
+            }}
+            disabled={deletingId === row._id}
+          >
+            <Trash2 className="h-4 w-4" />
+            {deletingId === row._id ? 'Deleting...' : 'Delete'}
+          </Button>
+        </PermissionGate>
+      </div>
+    ),
+    [deletingId]
+  );
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -716,16 +724,18 @@ export default function LedgersPage() {
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-            }}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Entry
-          </Button>
+          <PermissionGate moduleKey="ledgers" action="create">
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Entry
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -863,6 +873,7 @@ export default function LedgersPage() {
 
       {/* Ledger Form */}
       {showForm && (
+        <PermissionGate moduleKey="ledgers" action={editingLedger ? 'edit' : 'create'}>
         <form
           onSubmit={handleSaveLedger}
           className="bg-card border border-border rounded-lg p-6 space-y-4"
@@ -1099,6 +1110,7 @@ export default function LedgersPage() {
             </Button>
           </div>
         </form>
+        </PermissionGate>
       )}
 
       {/* Ledger List - DataTable */}

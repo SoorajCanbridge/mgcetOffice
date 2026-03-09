@@ -102,8 +102,10 @@ export function AppHeader() {
                       {user.email && (
                         <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
                       )}
-                      {user.role && (
-                        <p className="text-xs leading-none text-muted-foreground capitalize">{user.role}</p>
+                      {user.role != null && (
+                        <p className="text-xs leading-none text-muted-foreground capitalize">
+                          {typeof user.role === 'string' ? user.role : (user.role?.name ?? user.role?.id ?? '')}
+                        </p>
                       )}
                     </div>
                   </DropdownMenuLabel>

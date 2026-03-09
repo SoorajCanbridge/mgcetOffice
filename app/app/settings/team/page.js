@@ -28,7 +28,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { Users, Plus, Mail, User as UserIcon, Shield, Trash2, Loader2, MoreVertical, Pencil, Phone, Clock } from 'lucide-react';
 
-const ROLES = [
+const DEFAULT_ROLES = [
   { value: 'admin', label: 'Admin', description: 'Full access to all features and settings' },
   { value: 'editor', label: 'Editor', description: 'Can create and edit content' },
   { value: 'viewer', label: 'Viewer', description: 'Read-only access to view data' },
@@ -53,19 +53,21 @@ export default function TeamSettingsPage() {
     name: '',
     email: '',
     password: '',
-    role: 'user',
+    role: '',
     phone: '',
   });
   const [editFormData, setEditFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    role: 'user',
+    role: '',
     isActive: true,
     password: '',
   });
   const [formErrors, setFormErrors] = useState({});
   const [editFormErrors, setEditFormErrors] = useState({});
+  const [rolesList, setRolesList] = useState([]);
+  const [rolesLoading, setRolesLoading] = useState(true);
 
   const collegeId = useMemo(() => {
     const c = user?.college;
@@ -103,6 +105,40 @@ export default function TeamSettingsPage() {
   useEffect(() => {
     fetchMembers(1);
   }, [fetchMembers]);
+
+  const fetchRoles = useCallback(async () => {
+    try {
+      setRolesLoading(true);
+      const response = await api.get('/roles', {}, true);
+      const data = response?.data ?? response ?? [];
+      const list = Array.isArray(data) ? data : [];
+      setRolesList(
+        list.map((r) => {
+          const id = r._id ?? r.id;
+          const name = r.name || '';
+          const label = name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+          return {
+            value: id ?? name,
+            label: label || String(id ?? ''),
+            description: r.description || '',
+          };
+        })
+      );
+    } catch {
+      setRolesList([]);
+    } finally {
+      setRolesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRoles();
+  }, [fetchRoles]);
+
+  const roles = useMemo(
+    () => (rolesList.length > 0 ? rolesList : DEFAULT_ROLES),
+    [rolesList]
+  );
 
   const validateForm = () => {
     const errs = {};
@@ -143,7 +179,7 @@ export default function TeamSettingsPage() {
       setSuccess('Team member added. They can log in with the email and password you set.');
       setTimeout(() => setSuccess(''), 5000);
       setOpenAdd(false);
-      setFormData({ name: '', email: '', password: '', role: 'user', phone: '' });
+      setFormData({ name: '', email: '', password: '', role: roles.length ? roles[0].value : 'user', phone: '' });
       setFormErrors({});
       fetchMembers(1);
     } catch (err) {
@@ -159,7 +195,7 @@ export default function TeamSettingsPage() {
       name: member.name ?? '',
       email: member.email ?? '',
       phone: member.phone ?? '',
-      role: member.role ?? 'user',
+      role: roleToValue(member.role) ?? (roles.length ? roles[0].value : 'user'),
       isActive: member.isActive !== false,
       password: '',
     });
@@ -225,7 +261,21 @@ export default function TeamSettingsPage() {
     if (editFormErrors[field]) setEditFormErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  const getRoleLabel = (role) => ROLES.find((r) => r.value === role)?.label ?? role;
+  const roleToValue = (r) => {
+    if (r == null || r === '') return undefined;
+    if (typeof r === 'object') return r._id ?? r.id ?? r.name;
+    return r;
+  };
+
+  const getRoleLabel = (role) => {
+    if (role == null || role === '') return '—';
+    if (typeof role === 'object') {
+      const name = role?.name ?? role?.id ?? '';
+      return String(name).replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) || '—';
+    }
+    const r = roles.find((x) => String(x.value) === String(role));
+    return r?.label ?? (typeof role === 'string' ? role.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—');
+  };
 
   const filteredMembers = useMemo(() => {
     if (!search.trim()) return members;
@@ -280,7 +330,7 @@ export default function TeamSettingsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All roles</SelectItem>
-            {ROLES.map((r) => (
+            {roles.map((r) => (
               <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
             ))}
           </SelectContent>
@@ -451,18 +501,19 @@ export default function TeamSettingsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Role</label>
-              <Select value={formData.role} onValueChange={(v) => handleFormChange('role', v)}>
+              <Select value={formData.role || undefined} onValueChange={(v) => handleFormChange('role', v)} disabled={rolesLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
+                  <SelectValue placeholder={rolesLoading ? 'Loading roles…' : 'Select role'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
+                  {roles.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
                       {r.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">Roles are managed in Settings → Roles.</p>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setOpenAdd(false)} disabled={submitting}>
@@ -517,16 +568,17 @@ export default function TeamSettingsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Role</label>
-              <Select value={editFormData.role} onValueChange={(v) => handleEditFormChange('role', v)}>
+              <Select value={editFormData.role ?? ''} onValueChange={(v) => handleEditFormChange('role', v)} disabled={rolesLoading}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder={rolesLoading ? 'Loading roles…' : 'Select role'} />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (
+                  {roles.map((r) => (
                     <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">Changing the role updates this user&apos;s access. Manage roles in Settings → Roles.</p>
             </div>
             <div className="flex items-center gap-2">
               <input

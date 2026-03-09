@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 
 const PAYROLL_BASE = '/teachers/payroll';

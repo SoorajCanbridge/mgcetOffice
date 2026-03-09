@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import {
   Dialog,
   DialogContent,
@@ -425,16 +426,18 @@ export default function AccountsPage() {
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-            }}
-            className="gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            New Account
-          </Button>
+          <PermissionGate moduleKey="accounts" action="create">
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Account
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -533,6 +536,7 @@ export default function AccountsPage() {
             </DialogDescription>
           </DialogHeader>
 
+          <PermissionGate moduleKey="accounts" action={editingAccount ? 'edit' : 'create'}>
           <form onSubmit={handleSaveAccount} className="space-y-6 mt-2">
             {/* 1. Basic */}
             <div className="space-y-4">
@@ -777,6 +781,7 @@ export default function AccountsPage() {
               </Button>
             </div>
           </form>
+          </PermissionGate>
         </DialogContent>
       </Dialog>
 

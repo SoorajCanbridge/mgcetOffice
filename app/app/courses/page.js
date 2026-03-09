@@ -6,6 +6,7 @@ import { BookOpen, Plus, Edit2, Trash2, RefreshCcw, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 import CourseForm from '@/components/course-form';
 import { AnalyticsStrip } from '@/components/analytics/AnalyticsStrip';
@@ -501,47 +502,51 @@ export default function CoursesPage() {
   ], [levelLabels.A, levelLabels.B, levelLabels.C]);
 
   // Define actions for Courses DataTable
-  const courseActions = useCallback((row) => (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          router.push(`/app/courses/${getCourseId(row)}`);
-        }}
-      >
-        <Eye className="h-4 w-4" />
-        
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEdit(row);
-        }}
-      >
-        <Edit2 className="h-4 w-4" />
-       
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDelete(row);
-        }}
-        disabled={deletingId === getCourseId(row)}
-      >
-        <Trash2 className="h-4 w-4" />
-        {/* {deletingId === getCourseId(row) ? 'Deleting...' : 'Delete'} */}
-      </Button>
-    </div>
-  ), [deletingId, router]);
+  const courseActions = useCallback(
+    (row) => (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={(e) => {
+            e.stopPropagation();
+            router.push(`/app/courses/${getCourseId(row)}`);
+          }}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        <PermissionGate moduleKey="courses" action="edit">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row);
+            }}
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
+        </PermissionGate>
+        <PermissionGate moduleKey="courses" action="delete">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row);
+            }}
+            disabled={deletingId === getCourseId(row)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </PermissionGate>
+      </div>
+    ),
+    [deletingId, router, handleEdit, handleDelete],
+  );
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -556,19 +561,20 @@ export default function CoursesPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={fetchCourses} className="gap-2" disabled={loading}>
             <RefreshCcw className="h-4 w-4" />
-           
           </Button>
-          <Button 
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-            }} 
-            className="gap-2" 
-            variant={showForm ? 'outline' : 'default'}
-          >
-            <Plus className="h-4 w-4" />
-            New Course
-          </Button>
+          <PermissionGate moduleKey="courses" action="create">
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+              className="gap-2"
+              variant={showForm ? 'outline' : 'default'}
+            >
+              <Plus className="h-4 w-4" />
+              New Course
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -588,20 +594,22 @@ export default function CoursesPage() {
 
       {/* Course Form Modal */}
       {showForm && (
-        <CourseForm
-          formData={formData}
-          formErrors={formErrors}
-          levelLabels={levelLabels}
-          levelValues={levelValues}
-          staff={staff}
-          editingCourse={editingCourse}
-          saving={saving}
-          error={error}
-          success={success}
-          onChange={handleChange}
-          onSubmit={handleSubmit}
-          onCancel={resetForm}
-        />
+        <PermissionGate moduleKey="courses" action={editingCourse ? 'edit' : 'create'}>
+          <CourseForm
+            formData={formData}
+            formErrors={formErrors}
+            levelLabels={levelLabels}
+            levelValues={levelValues}
+            staff={staff}
+            editingCourse={editingCourse}
+            saving={saving}
+            error={error}
+            success={success}
+            onChange={handleChange}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+          />
+        </PermissionGate>
       )}
 
       {/* Course List - DataTable */}

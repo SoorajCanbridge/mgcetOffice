@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { api, API_URL, deleteUploadedFile } from '@/lib/api';
 import { getStudentPhotoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 import StudentForm from '@/components/student-form';
 import { AnalyticsStrip } from '@/components/analytics/AnalyticsStrip';
@@ -751,34 +752,38 @@ export default function StudentsPage() {
           <Eye className="h-4 w-4" />
           View
         </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEdit(row);
-        }}
-      >
-        <Edit2 className="h-4 w-4" />
-        Edit
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDelete(row);
-        }}
-        disabled={deletingId === getStudentId(row)}
-      >
-        <Trash2 className="h-4 w-4" />
-        {deletingId === getStudentId(row) ? 'Deleting...' : 'Delete'}
-      </Button>
-    </div>
+        <PermissionGate moduleKey="students" action="edit">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row);
+            }}
+          >
+            <Edit2 className="h-4 w-4" />
+            Edit
+          </Button>
+        </PermissionGate>
+        <PermissionGate moduleKey="students" action="delete">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row);
+            }}
+            disabled={deletingId === getStudentId(row)}
+          >
+            <Trash2 className="h-4 w-4" />
+            {deletingId === getStudentId(row) ? 'Deleting...' : 'Delete'}
+          </Button>
+        </PermissionGate>
+      </div>
     );
-  }, [deletingId, router]);
+  }, [deletingId, router, handleEdit, handleDelete]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -795,10 +800,19 @@ export default function StudentsPage() {
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={() => { resetForm(); setShowForm(true); }} className="gap-2" variant={showForm ? 'outline' : 'default'}>
-            <Plus className="h-4 w-4" />
-            New Student
-          </Button>
+          <PermissionGate moduleKey="students" action="create">
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+              className="gap-2"
+              variant={showForm ? 'outline' : 'default'}
+            >
+              <Plus className="h-4 w-4" />
+              New Student
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -946,26 +960,28 @@ export default function StudentsPage() {
 
       {/* Student Form Modal */}
       {showForm && (
-        <StudentForm
-          formData={formData}
-          formErrors={formErrors}
-          courses={courses}
-          editingStudent={editingStudent}
-          saving={saving}
-          error={error}
-          success={success}
-          onChange={handleChange}
-          onSubmit={handleSubmit}
-          onCancel={resetForm}
-          photoDisplayUrl={photoPreviewDataUrl || getStudentPhotoUrl(formData.photo, API_URL)}
-          onPhotoChange={handlePhotoChange}
-          onPhotoUpload={handlePhotoUpload}
-          onPhotoClear={handlePhotoClear}
-          uploadingPhoto={uploadingPhoto}
-          hasSelectedPhoto={!!selectedPhotoFile}
-          hasCurrentPhoto={!!formData.photo}
-          photoInputRef={photoInputRef}
-        />
+        <PermissionGate moduleKey="students" action={editingStudent ? 'edit' : 'create'}>
+          <StudentForm
+            formData={formData}
+            formErrors={formErrors}
+            courses={courses}
+            editingStudent={editingStudent}
+            saving={saving}
+            error={error}
+            success={success}
+            onChange={handleChange}
+            onSubmit={handleSubmit}
+            onCancel={resetForm}
+            photoDisplayUrl={photoPreviewDataUrl || getStudentPhotoUrl(formData.photo, API_URL)}
+            onPhotoChange={handlePhotoChange}
+            onPhotoUpload={handlePhotoUpload}
+            onPhotoClear={handlePhotoClear}
+            uploadingPhoto={uploadingPhoto}
+            hasSelectedPhoto={!!selectedPhotoFile}
+            hasCurrentPhoto={!!formData.photo}
+            photoInputRef={photoInputRef}
+          />
+        </PermissionGate>
       )}
 
       {/* Student Details Modal */}

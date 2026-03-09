@@ -24,6 +24,7 @@ import {
 import { api, API_URL } from '@/lib/api';
 import { getUploadedImageUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 import {
   Dialog,
@@ -357,18 +358,22 @@ export default function FinanceTrackingExpensesPage() {
             <Eye className="h-4 w-4 mr-2" />
             View
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleEdit(row)}>
-            <Edit2 className="h-4 w-4 mr-2" />
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => handleCancel(row)}
-            disabled={cancellingId === row._id}
-            className={row.isCancelled ? 'text-emerald-600' : ''}
-          >
-            <XCircle className="h-4 w-4 mr-2" />
-            {row.isCancelled ? 'Restore' : 'Cancel'}
-          </DropdownMenuItem>
+          <PermissionGate moduleKey="finance" action="edit">
+            <DropdownMenuItem onClick={() => handleEdit(row)}>
+              <Edit2 className="h-4 w-4 mr-2" />
+              Edit
+            </DropdownMenuItem>
+          </PermissionGate>
+          <PermissionGate moduleKey="finance" action="delete">
+            <DropdownMenuItem
+              onClick={() => handleCancel(row)}
+              disabled={cancellingId === row._id}
+              className={row.isCancelled ? 'text-emerald-600' : ''}
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              {row.isCancelled ? 'Restore' : 'Cancel'}
+            </DropdownMenuItem>
+          </PermissionGate>
         </DropdownMenuContent>
       </DropdownMenu>
     ),
@@ -397,10 +402,18 @@ export default function FinanceTrackingExpensesPage() {
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button onClick={() => { resetForm(); setShowForm(true); }} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Expense
-          </Button>
+          <PermissionGate moduleKey="finance" action="create">
+            <Button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Expense
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -444,6 +457,7 @@ export default function FinanceTrackingExpensesPage() {
               {editingId ? 'Update expense details and recipient.' : 'Record new expense. Optionally add recipient details first.'}
             </DialogDescription>
           </DialogHeader>
+          <PermissionGate moduleKey="finance" action={editingId ? 'edit' : 'create'}>
           <form onSubmit={handleSave} className="space-y-5 mt-2">
             {/* Recipient — top */}
             <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -538,6 +552,7 @@ export default function FinanceTrackingExpensesPage() {
               </Button>
             </div>
           </form>
+          </PermissionGate>
         </DialogContent>
       </Dialog>
 

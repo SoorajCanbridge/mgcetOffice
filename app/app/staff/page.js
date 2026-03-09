@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { api, API_URL, deleteUploadedFile } from '@/lib/api';
 import { getStaffPhotoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 import StaffForm from '@/components/staff-form';
 import NonTeachingStaffForm from '@/components/non-teaching-staff-form';
@@ -413,31 +414,35 @@ export default function StaffPage() {
           <Eye className="h-4 w-4" />
           View
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEdit(row);
-          }}
-        >
-          <Edit2 className="h-4 w-4" />
-          Edit
-        </Button>
-        <Button
-          variant="destructive"
-          size="sm"
-          className="gap-2"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDelete(row);
-          }}
-          disabled={deletingId === getStaffId(row)}
-        >
-          <Trash2 className="h-4 w-4" />
-          {deletingId === getStaffId(row) ? 'Deleting...' : 'Delete'}
-        </Button>
+        <PermissionGate moduleKey="staff" action="edit">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row);
+            }}
+          >
+            <Edit2 className="h-4 w-4" />
+            Edit
+          </Button>
+        </PermissionGate>
+        <PermissionGate moduleKey="staff" action="delete">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row);
+            }}
+            disabled={deletingId === getStaffId(row)}
+          >
+            <Trash2 className="h-4 w-4" />
+            {deletingId === getStaffId(row) ? 'Deleting...' : 'Delete'}
+          </Button>
+        </PermissionGate>
       </div>
     ),
     [deletingId, handleView, handleEdit, handleDelete],
@@ -472,17 +477,19 @@ export default function StaffPage() {
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button
-            onClick={() => {
-              setEditingStaff(null);
-              setShowForm(true);
-            }}
-            className="gap-2"
-            variant={showForm ? 'outline' : 'default'}
-          >
-            <Plus className="h-4 w-4" />
-            New Staff
-          </Button>
+          <PermissionGate moduleKey="staff" action="create">
+            <Button
+              onClick={() => {
+                setEditingStaff(null);
+                setShowForm(true);
+              }}
+              className="gap-2"
+              variant={showForm ? 'outline' : 'default'}
+            >
+              <Plus className="h-4 w-4" />
+              New Staff
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -568,13 +575,15 @@ export default function StaffPage() {
 
       {/* Staff Form Modal */}
       {showForm && (
-        <StaffForm
-          open={showForm}
-          onClose={handleFormClose}
-          editingStaff={editingStaff}
-          courses={courses}
-          onSuccess={handleFormSuccess}
-        />
+        <PermissionGate moduleKey="staff" action={editingStaff ? 'edit' : 'create'}>
+          <StaffForm
+            open={showForm}
+            onClose={handleFormClose}
+            editingStaff={editingStaff}
+            courses={courses}
+            onSuccess={handleFormSuccess}
+          />
+        </PermissionGate>
       )}
 
       {/* Staff List - DataTable */}

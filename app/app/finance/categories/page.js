@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 import { DataTable } from '@/components/data-table';
 
 const FINANCE_BASE = '/finance';
@@ -239,15 +240,41 @@ export default function FinanceCategoriesPage() {
   const actions = useCallback(
     (row) => (
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/app/finance/categories/${row._id}`); }}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            router.push(`/app/finance/categories/${row._id}`);
+          }}
+        >
           <Eye className="h-4 w-4 mr-1" /> View
         </Button>
-        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleEdit(row); }}>
-          <Edit2 className="h-4 w-4" />
-        </Button>
-        <Button variant="destructive" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(row); }} disabled={deletingId === row._id}>
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <PermissionGate moduleKey="financeCategories" action="edit">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row);
+            }}
+          >
+            <Edit2 className="h-4 w-4" />
+          </Button>
+        </PermissionGate>
+        <PermissionGate moduleKey="financeCategories" action="delete">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row);
+            }}
+            disabled={deletingId === row._id}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </PermissionGate>
       </div>
     ),
     [deletingId, router]
@@ -269,10 +296,17 @@ export default function FinanceCategoriesPage() {
             </div>
           </div>
         </div>
-        <Button onClick={() => { resetForm(); setShowForm(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Category
-        </Button>
+        <PermissionGate moduleKey="financeCategories" action="create">
+          <Button
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Category
+          </Button>
+        </PermissionGate>
       </div>
 
       {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
@@ -328,6 +362,7 @@ export default function FinanceCategoriesPage() {
 
       {/* Add/Edit form */}
       {showForm && (
+        <PermissionGate moduleKey="financeCategories" action={editingId ? 'edit' : 'create'}>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">{editingId ? 'Edit Category' : 'New Category'}</h2>
           <form onSubmit={handleSave} className="space-y-4">
@@ -359,6 +394,7 @@ export default function FinanceCategoriesPage() {
             </div>
           </form>
         </div>
+        </PermissionGate>
       )}
 
       {/* Categories table */}
