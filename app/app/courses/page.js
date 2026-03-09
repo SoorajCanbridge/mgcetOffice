@@ -516,7 +516,7 @@ export default function CoursesPage() {
         >
           <Eye className="h-4 w-4" />
         </Button>
-        <PermissionGate moduleKey="courses" action="edit">
+        <PermissionGate moduleKey="academic" action="edit">
           <Button
             variant="outline"
             size="sm"
@@ -529,7 +529,7 @@ export default function CoursesPage() {
             <Edit2 className="h-4 w-4" />
           </Button>
         </PermissionGate>
-        <PermissionGate moduleKey="courses" action="delete">
+        <PermissionGate moduleKey="academic" action="delete">
           <Button
             variant="destructive"
             size="sm"
@@ -562,7 +562,7 @@ export default function CoursesPage() {
           <Button variant="outline" onClick={fetchCourses} className="gap-2" disabled={loading}>
             <RefreshCcw className="h-4 w-4" />
           </Button>
-          <PermissionGate moduleKey="courses" action="create">
+          <PermissionGate moduleKey="academic" action="create">
             <Button
               onClick={() => {
                 resetForm();
@@ -594,7 +594,7 @@ export default function CoursesPage() {
 
       {/* Course Form Modal */}
       {showForm && (
-        <PermissionGate moduleKey="courses" action={editingCourse ? 'edit' : 'create'}>
+        <PermissionGate moduleKey="academic" action={editingCourse ? 'edit' : 'create'}>
           <CourseForm
             formData={formData}
             formErrors={formErrors}

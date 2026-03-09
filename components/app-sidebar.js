@@ -196,7 +196,7 @@ const navGroups = [
   {
     label: "Academics",
     items: [
-      { title: "Courses", url: "/app/courses", icon: BookOpen, moduleKey: "courses" },
+      { title: "Courses", url: "/app/courses", icon: BookOpen, moduleKey: "academic" },
       { title: "Students", url: "/app/students", icon: Users, moduleKey: "students" },
     ],
   },
@@ -204,14 +204,14 @@ const navGroups = [
     label: "Staff",
     items: [
       { title: "Staff", url: "/app/staff", icon: Briefcase, moduleKey: "staff" },
-      { title: "Staff Attendance", url: "/app/staff-attendance", icon: Clock, moduleKey: "staffAttendance" },
+      { title: "Staff Attendance", url: "/app/staff-attendance", icon: Clock, moduleKey: "attendance" },
     ],
   },
   {
     label: "Fees & Payments",
     items: [
       { title: "Fees", url: "/app/invoices/saved-contents", icon: BookMarked, moduleKey: "fees" },
-      { title: "Invoices", url: "/app/invoices", icon: FileText, moduleKey: "invoices" },
+      { title: "Invoices", url: "/app/invoices", icon: FileText, moduleKey: "invoice" },
       { title: "Payments", url: "/app/invoices/payments", icon: CreditCard, moduleKey: "payments" },
       { title: "Payroll", url: "/app/payroll", icon: Briefcase, moduleKey: "payroll" },
     ],

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { api, API_URL } from '@/lib/api';
@@ -35,6 +35,12 @@ export default function GeneralSettingsPage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const fileInputRef = useRef(null);
 
+  const collegeId = useMemo(() => {
+    const c = user?.college;
+    if (!c) return '';
+    return typeof c === 'object' ? (c._id ?? c.id ?? '') : String(c);
+  }, [user?.college]);
+
   // Fetch institution details on component mount
   useEffect(() => {
     fetchInstitutionDetails();
@@ -46,7 +52,8 @@ export default function GeneralSettingsPage() {
       setError('');
       
       // Assuming the API endpoint is /api/institution or /api/institution-details
-      const college = await api.get(`/colleges/${user.college}`);
+      if (!collegeId) return;
+      const college = await api.get(`/colleges/${collegeId}`);
       setFormData({
         name: college?.data.name || '',
         code: college?.data.code || '',
@@ -226,10 +233,11 @@ export default function GeneralSettingsPage() {
     setSuccess('');
 
     try {
+      if (!collegeId) return;
       const formData = new FormData();
       formData.append('logo', selectedFile);
 
-      const response = await api.uploadFile(`/colleges/${user.college}/logo`, formData, true);
+      const response = await api.uploadFile(`/colleges/${collegeId}/logo`, formData, true);
       
       // Update logo URL from response (resolve to API base URL so image loads from backend)
       const rawLogo = response?.data?.logo || response?.logo || response?.data?.logoUrl;
@@ -288,7 +296,8 @@ export default function GeneralSettingsPage() {
       let response;
       if (originalData) {
         // Update existing institution
-        response = await api.put(`/colleges/${user.college}`, submitData,{},true);
+        if (!collegeId) return;
+        response = await api.put(`/colleges/${collegeId}`, submitData,{},true);
       } else {
         // Create new institution
         response = await api.post('/colleges', submitData,{},true);
