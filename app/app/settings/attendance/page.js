@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -99,6 +99,11 @@ const REPORT_FREQUENCIES = [
 
 export default function AttendanceCriteriaSettingsPage() {
   const { user } = useAuth();
+  const collegeId = useMemo(() => {
+    const c = user?.college;
+    if (!c) return '';
+    return typeof c === 'object' ? (c._id ?? c.id ?? '') : String(c);
+  }, [user?.college]);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -382,8 +387,9 @@ export default function AttendanceCriteriaSettingsPage() {
     setLoading(true);
 
     try {
+      if (!collegeId) return;
       const response = await api.patch(
-        `/attendance-criteria/college/${user.college}/section`,
+        `/attendance-criteria/college/${collegeId}/section`,
         {
           section,
           data: formData[section],
@@ -408,8 +414,9 @@ export default function AttendanceCriteriaSettingsPage() {
     try {
       setLoading(true);
       setError('');
+      if (!collegeId) return;
       const response = await api.get(
-        `/attendance-criteria/college/${user.college}/default`,
+        `/attendance-criteria/college/${collegeId}/default`,
         {},
         true
       );

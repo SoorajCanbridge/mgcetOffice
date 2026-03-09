@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { GraduationCap, Edit2, Save, X } from 'lucide-react';
@@ -61,6 +61,12 @@ const normalizeLevelValues = (levelValues) => {
 
 export default function AcademicSettingsPage() {
   const { user } = useAuth();
+
+  const collegeId = useMemo(() => {
+    const c = user?.college;
+    if (!c) return '';
+    return typeof c === 'object' ? (c._id ?? c.id ?? '') : String(c);
+  }, [user?.college]);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -74,15 +80,17 @@ export default function AcademicSettingsPage() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => { 
+    if (!collegeId) return;
     fetchAcademicConfig();
-  }, [user?.college]);
+  }, [collegeId]);
 
   const fetchAcademicConfig = async () => {
     try {
       setFetching(true);
       setError('');
 
-      const response = await api.get(`/academic/config/${user.college}`);
+      if (!collegeId) return;
+      const response = await api.get(`/academic/config/${collegeId}`);
       const config = response?.data || response || {};
       const normalized = normalizeLevelNames(config.levelNames);
       const normalizedValues = normalizeLevelValues(config.levelValues);
@@ -294,7 +302,8 @@ export default function AcademicSettingsPage() {
         },
       };
 
-      const response = await api.put(`/academic/config/${user.college}`, payload, {}, true);
+      if (!collegeId) return;
+      const response = await api.put(`/academic/config/${collegeId}`, payload, {}, true);
       const updatedNames = (response?.data && response.data.levelNames) || payload.levelNames;
       const updatedValues = (response?.data && response.data.levelValues) || payload.levelValues;
 
