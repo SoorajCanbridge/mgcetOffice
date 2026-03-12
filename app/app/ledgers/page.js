@@ -641,7 +641,7 @@ export default function LedgersPage() {
           <Eye className="h-4 w-4" />
           View
         </Button>
-        <PermissionGate moduleKey="ledgers" action="edit">
+        <PermissionGate moduleKey="finance" action="edit">
           <Button
             variant="outline"
             size="sm"
@@ -655,7 +655,7 @@ export default function LedgersPage() {
             Edit
           </Button>
         </PermissionGate>
-        <PermissionGate moduleKey="ledgers" action="delete">
+        <PermissionGate moduleKey="finance" action="delete">
           <Button
             variant="destructive"
             size="sm"
@@ -724,7 +724,7 @@ export default function LedgersPage() {
             <Download className="h-4 w-4" />
             Export CSV
           </Button>
-          <PermissionGate moduleKey="ledgers" action="create">
+          <PermissionGate moduleKey="finance" action="create">
             <Button
               onClick={() => {
                 resetForm();
@@ -873,7 +873,7 @@ export default function LedgersPage() {
 
       {/* Ledger Form */}
       {showForm && (
-        <PermissionGate moduleKey="ledgers" action={editingLedger ? 'edit' : 'create'}>
+        <PermissionGate moduleKey="finance" action={editingLedger ? 'edit' : 'create'}>
         <form
           onSubmit={handleSaveLedger}
           className="bg-card border border-border rounded-lg p-6 space-y-4"

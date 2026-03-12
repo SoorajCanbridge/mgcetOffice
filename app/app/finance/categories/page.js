@@ -250,7 +250,7 @@ export default function FinanceCategoriesPage() {
         >
           <Eye className="h-4 w-4 mr-1" /> View
         </Button>
-        <PermissionGate moduleKey="financeCategories" action="edit">
+        <PermissionGate moduleKey="finance" action="edit">
           <Button
             variant="outline"
             size="sm"
@@ -262,7 +262,7 @@ export default function FinanceCategoriesPage() {
             <Edit2 className="h-4 w-4" />
           </Button>
         </PermissionGate>
-        <PermissionGate moduleKey="financeCategories" action="delete">
+        <PermissionGate moduleKey="finance" action="delete">
           <Button
             variant="destructive"
             size="sm"
@@ -296,7 +296,7 @@ export default function FinanceCategoriesPage() {
             </div>
           </div>
         </div>
-        <PermissionGate moduleKey="financeCategories" action="create">
+        <PermissionGate moduleKey="finance" action="create">
           <Button
             onClick={() => {
               resetForm();
@@ -362,7 +362,7 @@ export default function FinanceCategoriesPage() {
 
       {/* Add/Edit form */}
       {showForm && (
-        <PermissionGate moduleKey="financeCategories" action={editingId ? 'edit' : 'create'}>
+        <PermissionGate moduleKey="finance" action={editingId ? 'edit' : 'create'}>
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">{editingId ? 'Edit Category' : 'New Category'}</h2>
           <form onSubmit={handleSave} className="space-y-4">

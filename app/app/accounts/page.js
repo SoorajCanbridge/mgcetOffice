@@ -426,7 +426,7 @@ export default function AccountsPage() {
             <RefreshCcw className="h-4 w-4" />
             Refresh
           </Button>
-          <PermissionGate moduleKey="accounts" action="create">
+          <PermissionGate moduleKey="finance" action="create">
             <Button
               onClick={() => {
                 resetForm();
@@ -536,7 +536,7 @@ export default function AccountsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <PermissionGate moduleKey="accounts" action={editingAccount ? 'edit' : 'create'}>
+          <PermissionGate moduleKey="finance" action={editingAccount ? 'edit' : 'create'}>
           <form onSubmit={handleSaveAccount} className="space-y-6 mt-2">
             {/* 1. Basic */}
             <div className="space-y-4">
