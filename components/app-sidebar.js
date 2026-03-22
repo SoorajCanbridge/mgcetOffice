@@ -16,7 +16,8 @@ import {
   Home, Settings, User2, ChevronsUpDown, BookOpen, Users, 
   Wallet, Receipt, Briefcase, Clock, GraduationCap,
   BarChart3, LayoutDashboard, Scale, Shield, ChevronRight, 
-  LogOut, CreditCard, Command, Bell, Search,BookMarked,FileText,Tag,TrendingUp,TrendingDown
+  LogOut, CreditCard, Command, Bell, Search, BookMarked, FileText, Tag, TrendingUp, TrendingDown,
+  Rocket, Building2, Package
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -214,6 +215,14 @@ const navGroups = [
       { title: "Invoices", url: "/app/invoices", icon: FileText, moduleKey: "invoice" },
       { title: "Payments", url: "/app/invoices/payments", icon: CreditCard, moduleKey: "payments" },
       { title: "Payroll", url: "/app/payroll", icon: Briefcase, moduleKey: "payroll" },
+      { title: "Transactions", url: "/app/payments", icon: BookOpen, moduleKey: "payments" },
+    ],
+  },
+  {
+    label: "Startup Kit",
+    items: [
+      { title: "Clients (New Colleges)", url: "/app/startup/clients", icon: Building2, moduleKey: "startup" },
+      { title: "Plans", url: "/app/startup/plans", icon: Package, moduleKey: "startup" },
     ],
   },
   {

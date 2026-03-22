@@ -34,6 +34,7 @@ import {
   GraduationCap,
   Building2,
   Send,
+  Percent,
 } from 'lucide-react';
 import {
   Dialog,
@@ -227,6 +228,11 @@ export default function InvoicesPage() {
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [emailInvoice, setEmailInvoice] = useState(null);
   const [emailTo, setEmailTo] = useState('');
+  const [feeWaiverOpen, setFeeWaiverOpen] = useState(false);
+  const [feeWaiverInvoice, setFeeWaiverInvoice] = useState(null);
+  const [feeWaiverDiscount, setFeeWaiverDiscount] = useState('');
+  const [feeWaiverNotes, setFeeWaiverNotes] = useState('');
+  const [savingFeeWaiver, setSavingFeeWaiver] = useState(false);
   const [cancellingId, setCancellingId] = useState('');
   const [recipientManualEntry, setRecipientManualEntry] = useState(false);
   const [recipientTypeChosen, setRecipientTypeChosen] = useState(false);
@@ -794,6 +800,58 @@ export default function InvoicesPage() {
     setError('');
   }, []);
 
+  const openFeeWaiverDialog = useCallback((inv) => {
+    if (!inv?._id || inv.status === 'cancelled') return;
+    setFeeWaiverInvoice(inv);
+    setFeeWaiverDiscount(inv.discount != null ? String(inv.discount) : '');
+    setFeeWaiverNotes(inv.notes || '');
+    setFeeWaiverOpen(true);
+    setError('');
+  }, []);
+
+  const closeFeeWaiverDialog = useCallback(() => {
+    setFeeWaiverOpen(false);
+    setFeeWaiverInvoice(null);
+    setFeeWaiverDiscount('');
+    setFeeWaiverNotes('');
+  }, []);
+
+  const handleFeeWaiverSubmit = async (e) => {
+    e.preventDefault();
+    if (!feeWaiverInvoice?._id) return;
+    setSavingFeeWaiver(true);
+    setError('');
+    try {
+      const response = await api.get(`${INVOICE_BASE}/${feeWaiverInvoice._id}`, {}, true);
+      const full = response?.data || response;
+      const discountNum = Number(feeWaiverDiscount) || 0;
+      const payload = {
+        invoiceNumber: full.invoiceNumber,
+        invoiceDate: full.invoiceDate,
+        dueDate: full.dueDate,
+        status: full.status,
+        billTo: full.billTo || {},
+        items: full.items || [],
+        taxCalculationMethod: full.taxCalculationMethod || 'total',
+        taxRate: full.taxRate ?? 0,
+        discount: discountNum,
+        paidAmount: full.paidAmount ?? 0,
+        notes: feeWaiverNotes.trim() || undefined,
+        terms: full.terms,
+        student: full.student?._id || full.student || undefined,
+        savedContent: full.savedContent?._id || full.savedContent || undefined,
+      };
+      await api.put(`${INVOICE_BASE}/${feeWaiverInvoice._id}`, payload, {}, true);
+      showSuccess('Fee waiver applied.');
+      closeFeeWaiverDialog();
+      await fetchInvoices();
+    } catch (err) {
+      setError(err.message || 'Failed to update invoice');
+    } finally {
+      setSavingFeeWaiver(false);
+    }
+  };
+
   const handleMarkAsSentInModal = useCallback(async () => {
     if (!savedDraftInvoice?._id || savedDraftInvoice.status === 'sent') return;
     try {
@@ -1255,6 +1313,7 @@ export default function InvoicesPage() {
               Edit
             </DropdownMenuItem>
           )}
+          
           {canPay && (
             <>
               <DropdownMenuItem onClick={() => router.push(`/app/invoices/payments?invoiceId=${row._id}`)}>
@@ -1262,6 +1321,12 @@ export default function InvoicesPage() {
                 Record Payment (Full Page)
               </DropdownMenuItem>
             </>
+          )}
+          {row.status !== 'cancelled' && (
+            <DropdownMenuItem onClick={() => openFeeWaiverDialog(row)}>
+              <Percent className="h-4 w-4 mr-2" />
+              Fee Waiver
+            </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={() => handleShareInvoice(row)}>
             <Share2 className="h-4 w-4 mr-2" />
@@ -1299,7 +1364,7 @@ export default function InvoicesPage() {
         </DropdownMenuContent>
       </DropdownMenu>
     );
-  }, [deletingId, cancellingId, openPaymentDialog, openEmailDialog, rowBalance]);
+  }, [deletingId, cancellingId, openPaymentDialog, openEmailDialog, openFeeWaiverDialog, rowBalance]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -2858,6 +2923,66 @@ export default function InvoicesPage() {
             </form>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Fee Waiver — updates discount & notes via same API as edit invoice */}
+      <Dialog
+        open={feeWaiverOpen}
+        onOpenChange={(open) => {
+          if (!open) closeFeeWaiverDialog();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Percent className="h-5 w-5" />
+              Fee Waiver
+            </DialogTitle>
+            <DialogDescription>
+              {feeWaiverInvoice && (
+                <span>
+                  Set discount and notes for invoice{' '}
+                  <strong>{feeWaiverInvoice.invoiceNumber || feeWaiverInvoice._id}</strong>
+                  {feeWaiverInvoice.billTo?.name && ` — ${feeWaiverInvoice.billTo.name}`}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {feeWaiverInvoice && (
+            <form onSubmit={handleFeeWaiverSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Discount</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={feeWaiverDiscount}
+                  onChange={(e) => setFeeWaiverDiscount(e.target.value)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Amount waived (same as invoice discount).</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Notes</label>
+                <textarea
+                  value={feeWaiverNotes}
+                  onChange={(e) => setFeeWaiverNotes(e.target.value)}
+                  placeholder="Reason or details for this waiver"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[88px]"
+                  rows={4}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeFeeWaiverDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={savingFeeWaiver}>
+                  {savingFeeWaiver ? 'Saving...' : 'Apply'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 

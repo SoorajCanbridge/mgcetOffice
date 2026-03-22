@@ -3,6 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   User,
   ArrowLeft,
@@ -21,12 +37,20 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  MoreHorizontal,
+  Eye,
+  Share2,
+  Download,
+  Trash2,
+  Percent,
 } from 'lucide-react';
 import { api, API_URL, deleteUploadedFile } from '@/lib/api';
 import { getStudentPhotoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { DataTable } from '@/components/data-table';
 import StudentForm from '@/components/student-form';
+
+const INVOICE_BASE = '/finance/invoices';
 
 const formatDateForDisplay = (date) => {
   if (!date) return '-';
@@ -117,6 +141,23 @@ export default function StudentDetailsPage() {
   const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef(null);
+
+  const [flash, setFlash] = useState(null);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState('');
+  const [cancellingInvoiceId, setCancellingInvoiceId] = useState('');
+  const [feeWaiverOpen, setFeeWaiverOpen] = useState(false);
+  const [feeWaiverInvoice, setFeeWaiverInvoice] = useState(null);
+  const [feeWaiverDiscount, setFeeWaiverDiscount] = useState('');
+  const [feeWaiverNotes, setFeeWaiverNotes] = useState('');
+  const [savingFeeWaiver, setSavingFeeWaiver] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailInvoice, setEmailInvoice] = useState(null);
+  const [emailTo, setEmailTo] = useState('');
+
+  const showFlash = useCallback((text, type = 'success') => {
+    setFlash({ type, text });
+    setTimeout(() => setFlash(null), 3500);
+  }, []);
 
   const fetchCourses = useCallback(async () => {
     if (!user?.college) return;
@@ -487,6 +528,193 @@ export default function StudentDetailsPage() {
     setShowEditForm(true);
   }, [student]);
 
+  const rowBalance = useCallback(
+    (row) => row.balanceAmount ?? ((row.totalAmount || 0) - (row.paidAmount || 0)),
+    [],
+  );
+
+  const getInvoiceViewUrl = useCallback((id, searchParams = {}) => {
+    if (typeof window === 'undefined') return '';
+    const base = `${window.location.origin}/app/invoices/${id}`;
+    if (Object.keys(searchParams).length === 0) return base;
+    const qs = new URLSearchParams(searchParams).toString();
+    return `${base}?${qs}`;
+  }, []);
+
+  const handleViewInvoice = useCallback(
+    (invoiceId) => {
+      router.push(`/app/invoices/${invoiceId}`);
+    },
+    [router],
+  );
+
+  const handleShareInvoice = useCallback(
+    async (invoice) => {
+      const url = getInvoiceViewUrl(invoice._id);
+      try {
+        await navigator.clipboard.writeText(url);
+        showFlash('Invoice link copied to clipboard.');
+      } catch {
+        showFlash('Could not copy link.', 'error');
+      }
+    },
+    [getInvoiceViewUrl, showFlash],
+  );
+
+  const handleDownloadInvoice = useCallback(
+    (invoice, options = {}) => {
+      const url = options.autoDownload
+        ? getInvoiceViewUrl(invoice._id, { download: '1' })
+        : getInvoiceViewUrl(invoice._id);
+      window.open(url, '_blank');
+    },
+    [getInvoiceViewUrl],
+  );
+
+  const openEmailDialog = useCallback((inv) => {
+    setEmailInvoice(inv);
+    setEmailTo(inv?.billTo?.email || '');
+    setShowEmailDialog(true);
+  }, []);
+
+  const handleSendEmail = useCallback(
+    (e) => {
+      e.preventDefault();
+      if (!emailInvoice?._id || !emailTo?.trim()) return;
+      const url = getInvoiceViewUrl(emailInvoice._id);
+      const subject = encodeURIComponent(`Invoice ${emailInvoice.invoiceNumber || emailInvoice._id}`);
+      const body = encodeURIComponent(`Please view your invoice: ${url}`);
+      window.location.href = `mailto:${emailTo.trim()}?subject=${subject}&body=${body}`;
+      setShowEmailDialog(false);
+      setEmailInvoice(null);
+      setEmailTo('');
+      showFlash('Email client opened.');
+    },
+    [emailInvoice, emailTo, getInvoiceViewUrl, showFlash],
+  );
+
+  const openFeeWaiverDialog = useCallback((inv) => {
+    if (!inv?._id || inv.status === 'cancelled') return;
+    setFeeWaiverInvoice(inv);
+    setFeeWaiverDiscount(inv.discount != null ? String(inv.discount) : '');
+    setFeeWaiverNotes(inv.notes || '');
+    setFeeWaiverOpen(true);
+  }, []);
+
+  const closeFeeWaiverDialog = useCallback(() => {
+    setFeeWaiverOpen(false);
+    setFeeWaiverInvoice(null);
+    setFeeWaiverDiscount('');
+    setFeeWaiverNotes('');
+  }, []);
+
+  const handleFeeWaiverSubmit = async (e) => {
+    e.preventDefault();
+    if (!feeWaiverInvoice?._id) return;
+    setSavingFeeWaiver(true);
+    try {
+      const response = await api.get(`${INVOICE_BASE}/${feeWaiverInvoice._id}`, {}, true);
+      const full = response?.data || response;
+      const discountNum = Number(feeWaiverDiscount) || 0;
+      const payload = {
+        invoiceNumber: full.invoiceNumber,
+        invoiceDate: full.invoiceDate,
+        dueDate: full.dueDate,
+        status: full.status,
+        billTo: full.billTo || {},
+        items: full.items || [],
+        taxCalculationMethod: full.taxCalculationMethod || 'total',
+        taxRate: full.taxRate ?? 0,
+        discount: discountNum,
+        paidAmount: full.paidAmount ?? 0,
+        notes: feeWaiverNotes.trim() || undefined,
+        terms: full.terms,
+        student: full.student?._id || full.student || undefined,
+        savedContent: full.savedContent?._id || full.savedContent || undefined,
+      };
+      await api.put(`${INVOICE_BASE}/${feeWaiverInvoice._id}`, payload, {}, true);
+      showFlash('Fee waiver applied.');
+      closeFeeWaiverDialog();
+      await fetchInvoices();
+    } catch (err) {
+      showFlash(err.message || 'Failed to update invoice', 'error');
+    } finally {
+      setSavingFeeWaiver(false);
+    }
+  };
+
+  const handleCancelInvoice = useCallback(
+    async (invoice) => {
+      if (!invoice?._id || invoice.status === 'paid') return;
+      const confirmed =
+        typeof window !== 'undefined'
+          ? window.confirm('Mark this invoice as cancelled?')
+          : true;
+      if (!confirmed) return;
+      try {
+        setCancellingInvoiceId(invoice._id);
+        const response = await api.get(`${INVOICE_BASE}/${invoice._id}`, {}, true);
+        const full = response?.data || response;
+        const payload = {
+          invoiceNumber: full.invoiceNumber,
+          invoiceDate: full.invoiceDate,
+          dueDate: full.dueDate,
+          status: 'cancelled',
+          billTo: full.billTo || {},
+          items: full.items || [],
+          taxRate: full.taxRate ?? 0,
+          discount: full.discount ?? 0,
+          paidAmount: full.paidAmount ?? 0,
+          notes: full.notes,
+          terms: full.terms,
+          student: full.student?._id || full.student || undefined,
+          savedContent: full.savedContent?._id || full.savedContent || undefined,
+        };
+        await api.put(`${INVOICE_BASE}/${invoice._id}`, payload, {}, true);
+        showFlash('Invoice cancelled.');
+        await fetchInvoices();
+      } catch (err) {
+        showFlash(err.message || 'Failed to cancel invoice', 'error');
+      } finally {
+        setCancellingInvoiceId('');
+      }
+    },
+    [fetchInvoices, showFlash],
+  );
+
+  const handleDeleteInvoice = useCallback(
+    async (invoice) => {
+      if (!invoice?._id) return;
+      if (invoice.status === 'paid') {
+        showFlash('Paid invoices cannot be deleted.', 'error');
+        return;
+      }
+      const confirmed =
+        typeof window !== 'undefined'
+          ? window.confirm('Delete this invoice?')
+          : true;
+      if (!confirmed) return;
+      try {
+        setDeletingInvoiceId(invoice._id);
+        await api.delete(`${INVOICE_BASE}/${invoice._id}`, {}, true);
+        showFlash('Invoice deleted.');
+        await fetchInvoices();
+      } catch (err) {
+        showFlash(err.message || 'Failed to delete invoice', 'error');
+      } finally {
+        setDeletingInvoiceId('');
+      }
+    },
+    [fetchInvoices, showFlash],
+  );
+
+  const handleViewPayment = useCallback(
+    (paymentId) => {
+      router.push(`/app/payments/${paymentId}`);
+    },
+    [router],
+  );
+
   // Define columns for Invoices DataTable
   const invoiceColumns = useMemo(() => [
     {
@@ -687,39 +915,117 @@ export default function StudentDetailsPage() {
     },
   ], []);
 
-  // Define actions for Invoices DataTable
-  const invoiceActions = useCallback((row) => (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          router.push(`/app/invoices?invoiceId=${row._id}`);
-        }}
-      >
-        View
-      </Button>
-    </div>
-  ), [router]);
+  // Define actions for Invoices DataTable (aligned with /app/invoices)
+  const invoiceActions = useCallback(
+    (row) => {
+      const balance = rowBalance(row);
+      const canPay = balance > 0 && row.status !== 'cancelled';
+      const canCancel = row.status !== 'paid' && row.status !== 'cancelled';
+      const isDraft = row.status === 'draft';
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button variant="outline" size="sm">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => handleViewInvoice(row._id)}>
+              <Eye className="h-4 w-4 mr-2" />
+              View
+            </DropdownMenuItem>
+            {isDraft && (
+              <DropdownMenuItem onClick={() => router.push(`/app/invoices?edit=${row._id}`)}>
+                <Edit2 className="h-4 w-4 mr-2" />
+                Edit
+              </DropdownMenuItem>
+            )}
+            {canPay && (
+              <DropdownMenuItem
+                onClick={() => router.push(`/app/invoices/payments?invoiceId=${row._id}`)}
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                Record Payment (Full Page)
+              </DropdownMenuItem>
+            )}
+            {row.status !== 'cancelled' && (
+              <DropdownMenuItem onClick={() => openFeeWaiverDialog(row)}>
+                <Percent className="h-4 w-4 mr-2" />
+                Fee Waiver
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => handleShareInvoice(row)}>
+              <Share2 className="h-4 w-4 mr-2" />
+              Share link
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleDownloadInvoice(row)}>
+              <Download className="h-4 w-4 mr-2" />
+              Download / Print
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openEmailDialog(row)}>
+              <Mail className="h-4 w-4 mr-2" />
+              Send via email
+            </DropdownMenuItem>
+            {canCancel && (
+              <DropdownMenuItem
+                onClick={() => handleCancelInvoice(row)}
+                disabled={cancellingInvoiceId === row._id}
+                className="text-amber-600 dark:text-amber-400 focus:text-amber-600"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                {cancellingInvoiceId === row._id ? 'Cancelling...' : 'Cancel invoice'}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            {isDraft && (
+              <DropdownMenuItem
+                onClick={() => handleDeleteInvoice(row)}
+                disabled={deletingInvoiceId === row._id}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                {deletingInvoiceId === row._id ? 'Deleting...' : 'Delete'}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      );
+    },
+    [
+      rowBalance,
+      router,
+      handleViewInvoice,
+      handleShareInvoice,
+      handleDownloadInvoice,
+      openEmailDialog,
+      openFeeWaiverDialog,
+      handleCancelInvoice,
+      handleDeleteInvoice,
+      cancellingInvoiceId,
+      deletingInvoiceId,
+    ],
+  );
 
   // Define actions for Payments DataTable
-  const paymentActions = useCallback((row) => (
-    <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          router.push(`/app/payments?paymentId=${row._id}`);
-        }}
-      >
-        View
-      </Button>
-    </div>
-  ), [router]);
+  const paymentActions = useCallback(
+    (row) => (
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewPayment(row._id);
+          }}
+        >
+          <Eye className="h-4 w-4" />
+          View
+        </Button>
+      </div>
+    ),
+    [handleViewPayment],
+  );
 
   if (loading) {
     return (
@@ -819,6 +1125,18 @@ export default function StudentDetailsPage() {
           </Button>
         </div>
       </div>
+
+      {flash && (
+        <div
+          className={`rounded-md border px-4 py-3 text-sm ${
+            flash.type === 'success'
+              ? 'border-green-200 bg-green-500/10 text-green-800 dark:border-green-900 dark:text-green-200'
+              : 'border-destructive/50 bg-destructive/10 text-destructive'
+          }`}
+        >
+          {flash.text}
+        </div>
+      )}
 
       {/* Student Information */}
       <div className="bg-card border border-border rounded-lg p-6">
@@ -1098,6 +1416,121 @@ export default function StudentDetailsPage() {
           emptyMessage="No payment records found for this student"
         />
       </div>
+
+      {/* Fee Waiver — same flow as /app/invoices */}
+      <Dialog
+        open={feeWaiverOpen}
+        onOpenChange={(open) => {
+          if (!open) closeFeeWaiverDialog();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Percent className="h-5 w-5" />
+              Fee Waiver
+            </DialogTitle>
+            <DialogDescription>
+              {feeWaiverInvoice && (
+                <span>
+                  Set discount and notes for invoice{' '}
+                  <strong>{feeWaiverInvoice.invoiceNumber || feeWaiverInvoice._id}</strong>
+                  {feeWaiverInvoice.billTo?.name && ` — ${feeWaiverInvoice.billTo.name}`}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {feeWaiverInvoice && (
+            <form onSubmit={handleFeeWaiverSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Discount</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={feeWaiverDiscount}
+                  onChange={(e) => setFeeWaiverDiscount(e.target.value)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Amount waived (same as invoice discount).</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Notes</label>
+                <textarea
+                  value={feeWaiverNotes}
+                  onChange={(e) => setFeeWaiverNotes(e.target.value)}
+                  placeholder="Reason or details for this waiver"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[88px]"
+                  rows={4}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeFeeWaiverDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={savingFeeWaiver}>
+                  {savingFeeWaiver ? 'Saving...' : 'Apply'}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showEmailDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowEmailDialog(false);
+            setEmailInvoice(null);
+            setEmailTo('');
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Send invoice via email
+            </DialogTitle>
+            <DialogDescription>
+              {emailInvoice && (
+                <span>
+                  Invoice <strong>{emailInvoice.invoiceNumber}</strong>
+                  {emailInvoice.billTo?.name && ` to ${emailInvoice.billTo.name}`}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {emailInvoice && (
+            <form onSubmit={handleSendEmail} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Recipient email *</label>
+                <Input
+                  type="email"
+                  required
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="email@example.com"
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowEmailDialog(false);
+                    setEmailInvoice(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Open email</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Student Form Modal */}
       {showEditForm && (

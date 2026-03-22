@@ -211,9 +211,25 @@ export function DataTable({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
   const [visibleColumns, setVisibleColumns] = useState(() => {
-    if (typeof window === 'undefined') return columns.map((col) => col.id || col.accessorKey);
-    const stored = storageKey ? localStorage.getItem(`${storageKey}_visibleColumns`) : null;
-    return stored ? JSON.parse(stored) : columns.map((col) => col.id || col.accessorKey);
+    const columnIds = columns.map((col) => col.id || col.accessorKey);
+    if (typeof window === 'undefined') return columnIds;
+
+    if (!storageKey) return columnIds;
+
+    const stored = localStorage.getItem(`${storageKey}_visibleColumns`);
+    if (!stored) return columnIds;
+
+    try {
+      const parsed = JSON.parse(stored);
+      const safe =
+        Array.isArray(parsed)
+          ? parsed.filter((id) => columnIds.includes(id))
+          : columnIds;
+      return safe.length ? safe : columnIds;
+    } catch {
+      // If localStorage has corrupted JSON or unexpected shape, fall back safely.
+      return columnIds;
+    }
   });
   const [showFilters, setShowFilters] = useState(false);
 

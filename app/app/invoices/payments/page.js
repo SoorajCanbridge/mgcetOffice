@@ -54,6 +54,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -105,6 +106,27 @@ const formatCurrency = (value) => {
   } catch {
     return String(value);
   }
+};
+
+/** Evenly distribute `totalAmount` across split rows so the sum matches (2+ decimal places). */
+const redistributeAccountSplits = (rows, totalAmount) => {
+  const list = rows?.length ? [...rows] : [];
+  const n = list.length;
+  const total = Math.max(0, Math.round(Number(totalAmount) * 100) / 100);
+  if (n === 0) return list;
+  if (n === 1) {
+    return [{ ...list[0], amount: String(total) }];
+  }
+  const share = Math.floor((total / n) * 100) / 100;
+  let assigned = 0;
+  return list.map((r, i) => {
+    if (i < n - 1) {
+      assigned += share;
+      return { ...r, amount: String(share) };
+    }
+    const last = Math.round((total - assigned) * 100) / 100;
+    return { ...r, amount: String(last) };
+  });
 };
 
 const DEFAULT_LEVEL_LABELS = {
@@ -170,12 +192,15 @@ export default function InvoicePaymentsPage() {
   const [selectedInvoice, setSelectedInvoice] = useState(null); // Single selected invoice for details view
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentModalTab, setPaymentModalTab] = useState('payment');
 
   // Payment form state
   const [paymentForm, setPaymentForm] = useState({
     paymentDate: formatDateForInput(new Date()),
     paymentMethod: 'cash',
     account: '',
+    accountSplitEnabled: false,
+    accountSplits: [], // [{ account, amount }] when splitting across ledger accounts
     reference: '',
     transactionId: '',
     chequeNumber: '',
@@ -523,6 +548,8 @@ export default function InvoicePaymentsPage() {
       paymentMethod: 'bank-transfer',
       reference: '',
       account: fullInvoice.account?._id || fullInvoice.account || '',
+      accountSplitEnabled: false,
+      accountSplits: [],
       itemPayments: [],
       paymentMode: 'full',
       transactionId: '',
@@ -531,12 +558,14 @@ export default function InvoicePaymentsPage() {
       bankName: '',
       description: '',
     });
+    setPaymentModalTab('payment');
     setShowPaymentModal(true);
     setError('');
   }, [calculateInvoiceTotals]);
 
   const closePaymentModal = useCallback(() => {
     setShowPaymentModal(false);
+    setPaymentModalTab('payment');
     setError('');
   }, []);
 
@@ -544,26 +573,108 @@ export default function InvoicePaymentsPage() {
     e?.preventDefault();
     if (!selectedInvoice?._id) {
       setError('No invoice selected for payment.');
-      return;
-    }
-
-    if (!paymentForm.account) {
-      setError('Please select a payment account.');
+      setPaymentModalTab('payment');
       return;
     }
 
     if (!paymentForm.paymentDate) {
       setError('Please select a payment date.');
+      setPaymentModalTab('payment');
       return;
+    }
+
+    const calculatedTotals = calculateInvoiceTotals(selectedInvoice);
+    const invoiceBalance = calculatedTotals.balanceAmount;
+
+    const payAmountForAccount =
+      paymentForm.paymentMode === 'full'
+        ? Number(paymentForm.amount) || 0
+        : paymentForm.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+
+    // Payment tab: amount / items (before account)
+    if (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length > 0) {
+      const itemPayments = paymentForm.itemPayments
+        .filter((ip) => ip.amount > 0)
+        .map((ip) => ({
+          itemIndex: ip.itemIndex,
+          amount: Number(ip.amount),
+        }));
+      if (itemPayments.length === 0) {
+        setError('Please specify payment amounts for at least one item.');
+        setPaymentModalTab('payment');
+        return;
+      }
+    } else {
+      const amount = Number(paymentForm.amount);
+      if (!amount || amount <= 0) {
+        setError('Please enter a valid payment amount.');
+        setPaymentModalTab('payment');
+        return;
+      }
+      if (amount > invoiceBalance) {
+        setError('Payment amount exceeds outstanding balance.');
+        setPaymentModalTab('payment');
+        return;
+      }
+    }
+
+    // Account tab: single account or splits
+    if (!paymentForm.accountSplitEnabled) {
+      if (!paymentForm.account) {
+        // setError('Please select a payment account on the Account tab.');
+        setPaymentModalTab('account');
+        return;
+      }
+    } else {
+      const rows = (paymentForm.accountSplits || [])
+        .map((r) => ({
+          account: r.account,
+          amount: Number(r.amount) || 0,
+        }))
+        .filter((r) => r.amount > 0);
+      if (rows.length < 2) {
+        setError('Add at least two account splits with amounts (Account tab).');
+        setPaymentModalTab('account');
+        return;
+      }
+      const uniq = new Set(rows.map((r) => String(r.account)));
+      if (uniq.size < 2) {
+        setError('Use at least two different accounts when splitting (Account tab).');
+        setPaymentModalTab('account');
+        return;
+      }
+      if (rows.some((r) => !r.account)) {
+        setError('Select an account for each split (Account tab).');
+        setPaymentModalTab('account');
+        return;
+      }
+      const splitSum = rows.reduce((s, r) => s + r.amount, 0);
+      if (Math.abs(splitSum - payAmountForAccount) > 0.01) {
+        setError(
+          `Account splits must sum to ${formatCurrency(payAmountForAccount)} (currently ${formatCurrency(splitSum)}). Use "Match payment total" on the Account tab.`
+        );
+        setPaymentModalTab('account');
+        return;
+      }
     }
 
     setError('');
     setProcessingPayment(true);
 
     try {
-      const calculatedTotals = calculateInvoiceTotals(selectedInvoice);
-      const invoiceBalance = calculatedTotals.balanceAmount;
-      
+      const accountSplitsPayload = paymentForm.accountSplitEnabled
+        ? (paymentForm.accountSplits || [])
+            .map((r) => ({
+              account: r.account,
+              amount: Number(r.amount) || 0,
+            }))
+            .filter((r) => r.amount > 0 && r.account)
+        : [];
+      const primaryAccount =
+        paymentForm.accountSplitEnabled && accountSplitsPayload.length >= 2
+          ? accountSplitsPayload[0].account
+          : paymentForm.account || selectedInvoice.account?._id || selectedInvoice.account;
+
       // If payment mode is 'items', use payInvoiceItems endpoint
       if (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length > 0) {
         const itemPayments = paymentForm.itemPayments
@@ -572,18 +683,13 @@ export default function InvoicePaymentsPage() {
             itemIndex: ip.itemIndex,
             amount: Number(ip.amount),
           }));
-        
-        if (itemPayments.length === 0) {
-          setError('Please specify payment amounts for at least one item.');
-          setProcessingPayment(false);
-          return;
-        }
 
         await api.post(
           `${INVOICE_BASE}/${selectedInvoice._id}/pay-items`,
           {
             itemPayments,
-            account: paymentForm.account || selectedInvoice.account?._id || selectedInvoice.account,
+            account: primaryAccount,
+            ...(accountSplitsPayload.length >= 2 ? { accountSplits: accountSplitsPayload } : {}),
             paymentDate: paymentForm.paymentDate,
             paymentMethod: paymentForm.paymentMethod || 'cash',
             notes: paymentForm.description || undefined,
@@ -593,26 +699,14 @@ export default function InvoicePaymentsPage() {
         );
         setSuccess('Item-level payment recorded successfully.');
       } else {
-        // Full payment mode
         const amount = Number(paymentForm.amount);
-        if (!amount || amount <= 0) {
-          setError('Please enter a valid payment amount.');
-          setProcessingPayment(false);
-          return;
-        }
-
-        if (amount > invoiceBalance) {
-          setError('Payment amount exceeds outstanding balance.');
-          setProcessingPayment(false);
-          return;
-        }
 
         const paymentPayload = {
           invoice: selectedInvoice._id,
           amount,
           paymentDate: paymentForm.paymentDate,
           paymentMethod: paymentForm.paymentMethod,
-          account: paymentForm.account,
+          account: primaryAccount,
           status: 'completed',
           referenceNumber: paymentForm.reference || undefined,
           transactionId: paymentForm.transactionId || undefined,
@@ -622,6 +716,10 @@ export default function InvoicePaymentsPage() {
           description: paymentForm.description || undefined,
           student: selectedInvoice.student?._id || selectedInvoice.student || selectedStudent?._id || undefined,
         };
+
+        if (accountSplitsPayload.length >= 2) {
+          paymentPayload.accountSplits = accountSplitsPayload;
+        }
 
         // If item payments are specified, include them
         if (paymentForm.itemPayments && paymentForm.itemPayments.length > 0) {
@@ -647,6 +745,8 @@ export default function InvoicePaymentsPage() {
         paymentDate: formatDateForInput(new Date()),
         paymentMethod: 'bank-transfer',
         account: '',
+        accountSplitEnabled: false,
+        accountSplits: [],
         reference: '',
         transactionId: '',
         chequeNumber: '',
@@ -657,6 +757,7 @@ export default function InvoicePaymentsPage() {
         paymentMode: 'full',
         amount: '',
       });
+      setPaymentModalTab('payment');
 
       // Refresh invoices
       if (selectedStudent?._id) {
@@ -740,7 +841,7 @@ export default function InvoicePaymentsPage() {
             {success}
           </div>
         )}
-        {error && (
+        {error && !showPaymentModal && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg flex items-center gap-2">
             <AlertCircle className="h-5 w-5" />
             {error}
@@ -1032,8 +1133,7 @@ export default function InvoicePaymentsPage() {
                           <div className="flex items-start gap-4">
                             <Checkbox
                               checked={isSelected}
-                              onCheckedChange={(e) => {
-                                e.stopPropagation();
+                              onCheckedChange={() => {
                                 handleToggleInvoice(invoice);
                               }}
                               disabled={balance <= 0}
@@ -1322,10 +1422,23 @@ export default function InvoicePaymentsPage() {
               ? (Number(paymentForm.amount) || 0)
               : totalItemPayment;
             const remainingBalance = invoiceBalance - paymentAmount;
+            const accountSplitsSum = (paymentForm.accountSplits || []).reduce(
+              (s, r) => s + (Number(r.amount) || 0),
+              0
+            );
             
             return (
               <form onSubmit={handleProcessPayment} className="flex flex-col flex-1 min-h-0">
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                  {error && (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-start gap-2"
+                    >
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>{error}</span>
+                    </div>
+                  )}
                   {/* Invoice Summary Card */}
                   <div className="bg-muted/50 border border-border rounded-lg p-4 space-y-2">
                     <div className="flex items-center justify-between">
@@ -1362,6 +1475,34 @@ export default function InvoicePaymentsPage() {
                     </div>
                   </div>
 
+                  <Tabs
+                    value={paymentModalTab}
+                    onValueChange={(v) => {
+                      setPaymentModalTab(v);
+                      if (v === 'account') {
+                        setPaymentForm((prev) => {
+                          if (!prev.accountSplitEnabled || !prev.accountSplits || prev.accountSplits.length < 2) {
+                            return prev;
+                          }
+                          const payAmt =
+                            prev.paymentMode === 'full'
+                              ? Number(prev.amount) || 0
+                              : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+                          return {
+                            ...prev,
+                            accountSplits: redistributeAccountSplits(prev.accountSplits, payAmt),
+                          };
+                        });
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="payment">Payment</TabsTrigger>
+                      <TabsTrigger value="account">Account</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="payment" className="space-y-4 mt-4">
                   {/* Payment Mode Selection */}
                   <div>
                     <label className="block text-sm font-medium mb-3">Payment Mode</label>
@@ -1371,12 +1512,22 @@ export default function InvoicePaymentsPage() {
                         onClick={() => {
                           const totals = calculateInvoiceTotals(selectedInvoice);
                           const balance = totals.balanceAmount;
-                          setPaymentForm((prev) => ({ 
-                            ...prev, 
-                            paymentMode: 'full',
-                            amount: balance > 0 ? String(balance) : '',
-                            itemPayments: []
-                          }));
+                          setPaymentForm((prev) => {
+                            const next = {
+                              ...prev,
+                              paymentMode: 'full',
+                              amount: balance > 0 ? String(balance) : '',
+                              itemPayments: [],
+                            };
+                            if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                              return next;
+                            }
+                            const payAmt = Number(next.amount) || 0;
+                            return {
+                              ...next,
+                              accountSplits: redistributeAccountSplits(next.accountSplits, payAmt),
+                            };
+                          });
                         }}
                         className={`p-3 border-2 rounded-lg text-left transition-all ${
                           paymentForm.paymentMode === 'full'
@@ -1399,11 +1550,19 @@ export default function InvoicePaymentsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setPaymentForm((prev) => ({ 
-                          ...prev, 
-                          paymentMode: 'items',
-                          amount: ''
-                        }))}
+                        onClick={() =>
+                          setPaymentForm((prev) => {
+                            const next = { ...prev, paymentMode: 'items', amount: '' };
+                            if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                              return next;
+                            }
+                            const payAmt = next.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+                            return {
+                              ...next,
+                              accountSplits: redistributeAccountSplits(next.accountSplits, payAmt),
+                            };
+                          })
+                        }
                         className={`p-3 border-2 rounded-lg text-left transition-all ${
                           paymentForm.paymentMode === 'items'
                             ? 'border-primary bg-primary/5'
@@ -1426,31 +1585,15 @@ export default function InvoicePaymentsPage() {
                     </div>
                   </div>
 
-                  {/* Account Selection */}
                   <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Account *
-                      {selectedAccount && (
-                        <span className="ml-2 text-xs text-muted-foreground font-normal">
-                          (Balance: {formatCurrency(selectedAccount.balance || 0)})
-                        </span>
-                      )}
-                    </label>
-                    <Select
-                      value={paymentForm.account || undefined}
-                      onValueChange={(value) => setPaymentForm((prev) => ({ ...prev, account: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select account" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {accounts.map((acc) => (
-                          <SelectItem key={acc._id} value={acc._id}>
-                            {acc.name} {acc.accountType ? `(${acc.accountType})` : ''} - {formatCurrency(acc.balance || 0)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <label className="block text-sm font-medium mb-2">Description</label>
+                    <textarea
+                      value={paymentForm.description}
+                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, description: e.target.value }))}
+                      placeholder="Payment description (optional)"
+                      rows={2}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
                   </div>
 
                   {paymentForm.paymentMode === 'full' ? (
@@ -1466,7 +1609,16 @@ export default function InvoicePaymentsPage() {
                               onClick={() => {
                                 const totals = calculateInvoiceTotals(selectedInvoice);
                                 const balance = totals.balanceAmount;
-                                setPaymentForm((prev) => ({ ...prev, amount: String(balance) }));
+                                setPaymentForm((prev) => {
+                                  const next = { ...prev, amount: String(balance) };
+                                  if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                                    return next;
+                                  }
+                                  return {
+                                    ...next,
+                                    accountSplits: redistributeAccountSplits(next.accountSplits, balance),
+                                  };
+                                });
                               }}
                               className="h-7 text-xs"
                             >
@@ -1479,7 +1631,17 @@ export default function InvoicePaymentsPage() {
                               onClick={() => {
                                 const totals = calculateInvoiceTotals(selectedInvoice);
                                 const balance = totals.balanceAmount;
-                                setPaymentForm((prev) => ({ ...prev, amount: String(Math.max(0, balance * 0.5)) }));
+                                const half = Math.max(0, balance * 0.5);
+                                setPaymentForm((prev) => {
+                                  const next = { ...prev, amount: String(half) };
+                                  if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                                    return next;
+                                  }
+                                  return {
+                                    ...next,
+                                    accountSplits: redistributeAccountSplits(next.accountSplits, half),
+                                  };
+                                });
                               }}
                               className="h-7 text-xs"
                             >
@@ -1495,6 +1657,18 @@ export default function InvoicePaymentsPage() {
                           required
                           value={paymentForm.amount}
                           onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
+                          onBlur={() => {
+                            setPaymentForm((prev) => {
+                              if (!prev.accountSplitEnabled || !prev.accountSplits || prev.accountSplits.length < 2) {
+                                return prev;
+                              }
+                              const payAmt = Number(prev.amount) || 0;
+                              return {
+                                ...prev,
+                                accountSplits: redistributeAccountSplits(prev.accountSplits, payAmt),
+                              };
+                            });
+                          }}
                           placeholder="0.00"
                         />
                         {paymentForm.amount && Number(paymentForm.amount) > invoiceBalance && (
@@ -1525,11 +1699,20 @@ export default function InvoicePaymentsPage() {
                                 })
                                 .filter(Boolean);
                               const totalAmount = itemPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-                              setPaymentForm((prev) => ({ 
-                                ...prev, 
-                                itemPayments,
-                                amount: String(totalAmount)
-                              }));
+                              setPaymentForm((prev) => {
+                                const next = {
+                                  ...prev,
+                                  itemPayments,
+                                  amount: String(totalAmount),
+                                };
+                                if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                                  return next;
+                                }
+                                return {
+                                  ...next,
+                                  accountSplits: redistributeAccountSplits(next.accountSplits, totalAmount),
+                                };
+                              });
                             }}
                             className="h-7 text-xs"
                           >
@@ -1568,11 +1751,20 @@ export default function InvoicePaymentsPage() {
                                         updatedPayments.push({ itemIndex: index, amount: itemBalance });
                                       }
                                       const totalAmount = updatedPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-                                      setPaymentForm((prev) => ({ 
-                                        ...prev, 
-                                        itemPayments: updatedPayments,
-                                        amount: String(totalAmount)
-                                      }));
+                                      setPaymentForm((prev) => {
+                                        const next = {
+                                          ...prev,
+                                          itemPayments: updatedPayments,
+                                          amount: String(totalAmount),
+                                        };
+                                        if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                                          return next;
+                                        }
+                                        return {
+                                          ...next,
+                                          accountSplits: redistributeAccountSplits(next.accountSplits, totalAmount),
+                                        };
+                                      });
                                     }}
                                     className="mt-1 w-4 h-4"
                                   />
@@ -1605,11 +1797,20 @@ export default function InvoicePaymentsPage() {
                                             updatedPayments.push({ itemIndex: index, amount: Math.min(amount, itemBalance) });
                                           }
                                           const totalAmount = updatedPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-                                          setPaymentForm((prev) => ({ 
-                                            ...prev, 
-                                            itemPayments: updatedPayments,
-                                            amount: String(totalAmount)
-                                          }));
+                                          setPaymentForm((prev) => {
+                                            const next = {
+                                              ...prev,
+                                              itemPayments: updatedPayments,
+                                              amount: String(totalAmount),
+                                            };
+                                            if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
+                                              return next;
+                                            }
+                                            return {
+                                              ...next,
+                                              accountSplits: redistributeAccountSplits(next.accountSplits, totalAmount),
+                                            };
+                                          });
                                         }}
                                         placeholder="0.00"
                                         className="mt-2"
@@ -1726,16 +1927,231 @@ export default function InvoicePaymentsPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Description</label>
-                    <textarea
-                      value={paymentForm.description}
-                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Payment description (optional)"
-                      rows={2}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
+                    </TabsContent>
+
+                    <TabsContent value="account" className="space-y-4 mt-4">
+                  {/* Account Selection */}
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Payment total: <span className="font-semibold text-foreground">{formatCurrency(paymentAmount)}</span>
+                      {paymentForm.paymentMode === 'items' && (
+                        <span className="ml-1">(item-level total)</span>
+                      )}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="account-split"
+                        checked={paymentForm.accountSplitEnabled}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setPaymentForm((prev) => {
+                              const totals = calculateInvoiceTotals(selectedInvoice);
+                              const bal = totals.balanceAmount;
+                              const payAmt =
+                                prev.paymentMode === 'full'
+                                  ? Number(prev.amount) || bal
+                                  : prev.itemPayments.reduce(
+                                      (s, ip) => s + (Number(ip.amount) || 0),
+                                      0
+                                    );
+                              const half = Math.round((payAmt / 2) * 100) / 100;
+                              const rest = Math.round((payAmt - half) * 100) / 100;
+                              return {
+                                ...prev,
+                                accountSplitEnabled: true,
+                                accountSplits: [
+                                  { account: prev.account, amount: String(half) },
+                                  { account: '', amount: String(rest) },
+                                ],
+                              };
+                            });
+                          } else {
+                            setPaymentForm((prev) => ({
+                              ...prev,
+                              accountSplitEnabled: false,
+                              accountSplits: [],
+                              account: prev.accountSplits?.[0]?.account || prev.account,
+                            }));
+                          }
+                        }}
+                      />
+                      <label htmlFor="account-split" className="text-sm font-medium cursor-pointer">
+                        Split across multiple accounts
+                      </label>
+                    </div>
+
+                    {!paymentForm.accountSplitEnabled ? (
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Account *
+                          {selectedAccount && (
+                            <span className="ml-2 text-xs text-muted-foreground font-normal">
+                              (Balance: {formatCurrency(selectedAccount.balance || 0)})
+                            </span>
+                          )}
+                        </label>
+                        <Select
+                          value={paymentForm.account || undefined}
+                          onValueChange={(value) => setPaymentForm((prev) => ({ ...prev, account: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select account" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accounts.map((acc) => (
+                              <SelectItem key={acc._id} value={acc._id}>
+                                {acc.name} {acc.accountType ? `(${acc.accountType})` : ''} - {formatCurrency(acc.balance || 0)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="block text-sm font-medium">Account splits *</label>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => {
+                              setPaymentForm((prev) => {
+                                if (!prev.accountSplits || prev.accountSplits.length < 2) return prev;
+                                const payAmt =
+                                  prev.paymentMode === 'full'
+                                    ? Number(prev.amount) || 0
+                                    : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+                                return {
+                                  ...prev,
+                                  accountSplits: redistributeAccountSplits(prev.accountSplits, payAmt),
+                                };
+                              });
+                            }}
+                          >
+                            Match payment total
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Allocate {formatCurrency(paymentAmount)} across at least two different accounts. Use &quot;Match
+                          payment total&quot; after changing the amount on the Payment tab.
+                        </p>
+                        {(paymentForm.accountSplits || []).map((row, idx) => {
+                          const rowAcc = accounts.find((a) => a._id === row.account);
+                          return (
+                            <div key={idx} className="flex flex-wrap gap-2 items-end">
+                              <div className="flex-1 min-w-[180px]">
+                                <Select
+                                  value={row.account || undefined}
+                                  onValueChange={(value) => {
+                                    setPaymentForm((prev) => {
+                                      const next = [...(prev.accountSplits || [])];
+                                      next[idx] = { ...next[idx], account: value };
+                                      return { ...prev, accountSplits: next };
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Account" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {accounts.map((acc) => (
+                                      <SelectItem key={acc._id} value={acc._id}>
+                                        {acc.name} {acc.accountType ? `(${acc.accountType})` : ''} —{' '}
+                                        {formatCurrency(acc.balance || 0)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="w-32">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.amount}
+                                  onChange={(e) => {
+                                    setPaymentForm((prev) => {
+                                      const next = [...(prev.accountSplits || [])];
+                                      next[idx] = { ...next[idx], amount: e.target.value };
+                                      return { ...prev, accountSplits: next };
+                                    });
+                                  }}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              {(paymentForm.accountSplits || []).length > 2 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0"
+                                  onClick={() => {
+                                    setPaymentForm((prev) => {
+                                      const list = [...(prev.accountSplits || [])];
+                                      if (list.length <= 2) return prev;
+                                      list.splice(idx, 1);
+                                      const payAmt =
+                                        prev.paymentMode === 'full'
+                                          ? Number(prev.amount) || 0
+                                          : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+                                      return {
+                                        ...prev,
+                                        accountSplits: redistributeAccountSplits(list, payAmt),
+                                      };
+                                    });
+                                  }}
+                                  aria-label="Remove split"
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {rowAcc && (
+                                <span className="text-xs text-muted-foreground pb-2 w-full sm:w-auto">
+                                  Balance: {formatCurrency(rowAcc.balance || 0)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setPaymentForm((prev) => {
+                              const nextSplits = [...(prev.accountSplits || []), { account: '', amount: '' }];
+                              const payAmt =
+                                prev.paymentMode === 'full'
+                                  ? Number(prev.amount) || 0
+                                  : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+                              return {
+                                ...prev,
+                                accountSplits: redistributeAccountSplits(nextSplits, payAmt),
+                              };
+                            });
+                          }}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add account
+                        </Button>
+                        <p
+                          className={`text-xs ${
+                            Math.abs(accountSplitsSum - paymentAmount) > 0.01
+                              ? 'text-amber-600 dark:text-amber-500'
+                              : 'text-muted-foreground'
+                          }`}
+                        >
+                          Split total: {formatCurrency(accountSplitsSum)} · Payment total:{' '}
+                          {formatCurrency(paymentAmount)}
+                          {Math.abs(accountSplitsSum - paymentAmount) > 0.01 &&
+                            ' — use Match payment total or adjust amounts'}
+                        </p>
+                      </div>
+                    )}
                   </div>
+                    </TabsContent>
+                  </Tabs>
 
                   {/* Payment Summary */}
                   {paymentAmount > 0 && (
@@ -1762,7 +2178,13 @@ export default function InvoicePaymentsPage() {
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={processingPayment || paymentAmount <= 0 || (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length === 0)}
+                    disabled={
+                      processingPayment ||
+                      paymentAmount <= 0 ||
+                      (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length === 0) ||
+                      (paymentForm.accountSplitEnabled &&
+                        Math.abs(accountSplitsSum - paymentAmount) > 0.01)
+                    }
                     className="flex-1"
                   >
                     {processingPayment ? 'Recording...' : `Record Payment ${paymentAmount > 0 ? `(${formatCurrency(paymentAmount)})` : ''}`}
