@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -40,6 +40,7 @@ const EMPTY_CONTENT = {
   },
   items: [],
   taxCalculationMethod: 'total', // 'product' or 'total'
+  lineItemDiscountEnabled: false,
   taxRate: 0,
   discount: 0,
   notes: '',
@@ -62,6 +63,10 @@ export default function SavedInvoiceContentsPage() {
   const [filterActive, setFilterActive] = useState('');
 
   const [contentForm, setContentForm] = useState(EMPTY_CONTENT);
+  const itemDiscountSum = useMemo(
+    () => (contentForm.items || []).reduce((sum, item) => sum + (Number(item.discount) || 0), 0),
+    [contentForm.items],
+  );
 
   const fetchContents = useCallback(async () => {
     if (!user?.college) return;
@@ -163,6 +168,15 @@ export default function SavedInvoiceContentsPage() {
     });
   };
 
+  useEffect(() => {
+    if (!contentForm.lineItemDiscountEnabled) return;
+    setContentForm((prev) => {
+      const current = Number(prev.discount) || 0;
+      if (Math.abs(current - itemDiscountSum) < 0.01) return prev;
+      return { ...prev, discount: itemDiscountSum };
+    });
+  }, [contentForm.lineItemDiscountEnabled, itemDiscountSum]);
+
   const addItem = () => {
     setContentForm((prev) => ({
       ...prev,
@@ -173,6 +187,7 @@ export default function SavedInvoiceContentsPage() {
           quantity: 1,
           unitPrice: 0,
           amount: 0,
+          discount: 0,
           taxRate: prev.taxCalculationMethod === 'product' ? (prev.taxRate || 0) : 0,
           taxAmount: 0,
         },
@@ -200,12 +215,13 @@ export default function SavedInvoiceContentsPage() {
           (item) => item.description && item.amount > 0,
         ).map(item => ({
           ...item,
+          discount: Number(item.discount) || 0,
           taxRate: contentForm.taxCalculationMethod === 'product' ? (Number(item.taxRate) || 0) : 0,
           taxAmount: contentForm.taxCalculationMethod === 'product' ? (Number(item.taxAmount) || 0) : 0,
         })),
         taxCalculationMethod: contentForm.taxCalculationMethod || 'total',
         taxRate: Number(contentForm.taxRate) || 0,
-        discount: Number(contentForm.discount) || 0,
+        discount: contentForm.lineItemDiscountEnabled ? itemDiscountSum : (Number(contentForm.discount) || 0),
         notes: contentForm.notes.trim() || undefined,
         terms: contentForm.terms.trim() || undefined,
         isActive: !!contentForm.isActive,
@@ -245,10 +261,12 @@ export default function SavedInvoiceContentsPage() {
       },
       items: (content.items || []).map(item => ({
         ...item,
+        discount: item.discount || 0,
         taxRate: item.taxRate || 0,
         taxAmount: item.taxAmount || 0,
       })),
       taxCalculationMethod: content.taxCalculationMethod || 'total',
+      lineItemDiscountEnabled: (content.items || []).some((item) => (Number(item.discount) || 0) > 0),
       taxRate: content.taxRate || 0,
       discount: content.discount || 0,
       notes: content.notes || '',
@@ -462,23 +480,81 @@ export default function SavedInvoiceContentsPage() {
           {/* Line Items */}
           <section className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-semibold">Line Items</h3>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5 text-primary" />
+                  <h3 className="text-base font-semibold">Line Items</h3>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={contentForm.taxCalculationMethod === 'product'}
+                    onChange={(e) =>
+                      setContentForm((prev) => ({
+                        ...prev,
+                        taxCalculationMethod: e.target.checked ? 'product' : 'total',
+                        items: prev.items.map((item) => {
+                          const amount = Number(item.amount) || 0;
+                          const nextRate = e.target.checked ? (Number(item.taxRate) || Number(prev.taxRate) || 0) : 0;
+                          return {
+                            ...item,
+                            taxRate: nextRate,
+                            taxAmount: e.target.checked ? (amount * nextRate) / 100 : 0,
+                          };
+                        }),
+                      }))
+                    }
+                    className="h-4 w-4"
+                  />
+                  Product-level tax
+                </label>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={!!contentForm.lineItemDiscountEnabled}
+                    onChange={(e) =>
+                      setContentForm((prev) => ({
+                        ...prev,
+                        lineItemDiscountEnabled: e.target.checked,
+                        items: prev.items.map((item) => ({
+                          ...item,
+                          discount: e.target.checked ? (Number(item.discount) || 0) : 0,
+                        })),
+                        discount: e.target.checked
+                          ? prev.items.reduce((sum, item) => sum + (Number(item.discount) || 0), 0)
+                          : 0,
+                      }))
+                    }
+                    className="h-4 w-4"
+                  />
+                  Product-level discount
+                </label>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={addItem}>
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
               </Button>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-2">
+              {contentForm.items.length > 0 && (
+                <div className="grid grid-cols-12 gap-1 px-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  <div className={contentForm.taxCalculationMethod === 'product' || contentForm.lineItemDiscountEnabled ? 'col-span-3' : 'col-span-5'}>
+                    Description
+                  </div>
+                  <div className="col-span-1 text-right">Qty</div>
+                  <div className="col-span-2 text-right">Unit</div>
+                  <div className="col-span-2 text-right">Amount</div>
+                  {contentForm.lineItemDiscountEnabled && <div className="col-span-2 text-right">Discount</div>}
+                  {contentForm.taxCalculationMethod === 'product' && <div className="col-span-1 text-right">Tax %</div>}
+                  <div className="col-span-1" />
+                </div>
+              )}
               {contentForm.items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-12 gap-3 items-end p-3 border border-border rounded-lg bg-background/50"
+                  className="grid grid-cols-12 gap-1 items-center p-2 border border-border rounded-lg bg-background/50"
                 >
-                  <div className={contentForm.taxCalculationMethod === 'product' ? 'col-span-4' : 'col-span-5'}>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Description</label>
+                  <div className={contentForm.taxCalculationMethod === 'product' || contentForm.lineItemDiscountEnabled ? 'col-span-3' : 'col-span-5'}>
                     <Input
                       value={item.description}
                       onChange={(e) => handleItemChange(index, 'description', e.target.value)}
@@ -486,30 +562,27 @@ export default function SavedInvoiceContentsPage() {
                       className="h-9"
                     />
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Qty</label>
+                  <div className="col-span-1">
                     <Input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={item.quantity}
                       onChange={(e) => handleItemChange(index, 'quantity', Number(e.target.value))}
                       className="h-9"
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Unit Price</label>
                     <Input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={item.unitPrice}
                       onChange={(e) => handleItemChange(index, 'unitPrice', Number(e.target.value))}
                       className="h-9"
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Amount</label>
                     <Input
                       type="number"
                       min="0"
@@ -519,13 +592,24 @@ export default function SavedInvoiceContentsPage() {
                       className="h-9 bg-muted"
                     />
                   </div>
-                  {contentForm.taxCalculationMethod === 'product' && (
+                  {contentForm.lineItemDiscountEnabled && (
                     <div className="col-span-2">
-                      <label className="block text-xs font-medium text-muted-foreground mb-1">Tax %</label>
                       <Input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="1"
+                        value={item.discount || 0}
+                        onChange={(e) => handleItemChange(index, 'discount', Number(e.target.value))}
+                        className="h-9"
+                      />
+                    </div>
+                  )}
+                  {contentForm.taxCalculationMethod === 'product' && (
+                    <div className="col-span-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
                         max="100"
                         value={item.taxRate || 0}
                         onChange={(e) => handleItemChange(index, 'taxRate', Number(e.target.value))}
@@ -562,54 +646,11 @@ export default function SavedInvoiceContentsPage() {
               <h3 className="text-base font-semibold">Tax & Totals</h3>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-2">Tax Calculation Method</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="taxCalculationMethod"
-                      value="total"
-                      checked={contentForm.taxCalculationMethod === 'total'}
-                      onChange={(e) => {
-                        setContentForm((prev) => ({
-                          ...prev,
-                          taxCalculationMethod: e.target.value,
-                          items: prev.items.map(item => ({ ...item, taxRate: 0, taxAmount: 0 })),
-                        }));
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Total-Level Tax</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="taxCalculationMethod"
-                      value="product"
-                      checked={contentForm.taxCalculationMethod === 'product'}
-                      onChange={(e) => {
-                        setContentForm((prev) => ({
-                          ...prev,
-                          taxCalculationMethod: e.target.value,
-                          items: prev.items.map(item => ({
-                            ...item,
-                            taxRate: item.taxRate || prev.taxRate || 0,
-                            taxAmount: item.amount ? ((item.amount * (item.taxRate || prev.taxRate || 0)) / 100) : 0,
-                          })),
-                        }));
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm">Product-Level Tax</span>
-                  </label>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {contentForm.taxCalculationMethod === 'total'
-                    ? 'Tax calculated on total subtotal'
-                    : 'Tax calculated per item'}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                {contentForm.taxCalculationMethod === 'total'
+                  ? 'Using total-level tax (default).'
+                  : 'Using product-level tax from line items.'}
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {contentForm.taxCalculationMethod === 'total' && (
                   <div>
@@ -635,8 +676,14 @@ export default function SavedInvoiceContentsPage() {
                     step="0.01"
                     value={contentForm.discount}
                     onChange={handleFormChange}
+                    readOnly={!!contentForm.lineItemDiscountEnabled}
                     className="h-9"
                   />
+                  {contentForm.lineItemDiscountEnabled && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Auto-calculated from item discounts.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -731,6 +778,7 @@ export default function SavedInvoiceContentsPage() {
                   <p className="text-sm text-muted-foreground">
                     {content.items?.length || 0} items • Tax Method:{' '}
                     {content.taxCalculationMethod === 'product' ? 'Product-Level' : 'Total-Level'}
+                    {content.items?.some((item) => (Number(item.discount) || 0) > 0) ? ' • Product Discount' : ''}
                     {content.taxCalculationMethod === 'total' && ` • Tax Rate: ${content.taxRate || 0}%`}
                     {' • Discount: '}
                     {content.discount || 0}

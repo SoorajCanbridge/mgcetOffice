@@ -11,6 +11,8 @@ import {
   RefreshCcw,
   Edit2,
   DollarSign,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 import { getUploadedImageUrl, getLogoUrl } from '@/lib/utils';
@@ -71,6 +73,191 @@ const escapeHtml = (s) => {
     .replace(/"/g, '&quot;');
 };
 
+const formatReceiptNumber = (serialNumber) => {
+  if (serialNumber === null || serialNumber === undefined || serialNumber === '') return '';
+  const digits = String(serialNumber).replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.padStart(5, '0').slice(-5);
+};
+
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function DetailRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-baseline justify-between py-2.5 border-b border-border-color last:border-0">
+      <span className="text-xs font-medium text-text-tertiary uppercase tracking-widest shrink-0 w-28">{label}</span>
+      <span className="text-sm font-medium text-text-secondary text-right">{value}</span>
+    </div>
+  );
+}
+
+function InfoCard({ title, children }) {
+  return (
+    <div className="rounded-xl border border-border-color overflow-hidden bg-bg-primary">
+      <div className="bg-bg-secondary border-b border-border-color px-4 py-2">
+        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-tertiary">{title}</p>
+      </div>
+      <div className="px-4 py-3 space-y-1">{children}</div>
+    </div>
+  );
+}
+
+// ── Print HTML ──────────────────────────────────────────────────────────────
+
+const buildPrintHtml = ({ income, college, category, account, student, incomeId, theme }) => {
+  const rec = income.recipient && typeof income.recipient === 'object' ? income.recipient : {};
+  const hasRec = !!(rec.name || rec.phone || rec.email || rec.address);
+  const courseName = student?.course && typeof student.course === 'object' ? student.course.name : null;
+  const collegeName = college?.name || 'Institution';
+  const collegeLogoUrl = college?.logo ? getLogoUrl(college.logo, API_URL, true) : '';
+  const collegeAddressParts = [college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean);
+  const collegeAddress = collegeAddressParts.join(' • ');
+  const collegeContact = [college?.phone, college?.email, college?.website].filter(Boolean).map(escapeHtml).join(' • ');
+  const receiptNum = formatReceiptNumber(income.serialNumber) || '—';
+  const amountStr = formatCurrency(income.amount ?? 0);
+  const t = theme || {};
+  const bgPrimary = t.bgPrimary || '#ffffff';
+  const textPrimary = t.textPrimary || '#1a1a1a';
+  const textSecondary = t.textSecondary || '#6c757d';
+  const textTertiary = t.textTertiary || '#adb5bd';
+  const borderColor = t.borderColor || '#dee2e6';
+  const success = t.success || '#10b981';
+  const error = t.error || '#ef4444';
+  const gradStart = t.bgGradientStart || '#667eea';
+  const gradEnd = t.bgGradientEnd || '#764ba2';
+  const primaryLight = t.primaryLight || '#e7ecff';
+
+  return `
+    <div style="max-width:19cm;margin:0 auto;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:${escapeHtml(textPrimary)};background:${escapeHtml(bgPrimary)};">
+
+      <!-- Watermark for cancelled -->
+      ${income.isCancelled ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;font-weight:900;color:rgba(239,68,68,0.07);letter-spacing:0.1em;pointer-events:none;z-index:0;">CANCELLED</div>` : ''}
+
+      <!-- Header -->
+      <div style="padding:28px 28px 22px;background:${escapeHtml(bgPrimary)};color:${escapeHtml(textPrimary)};">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;">
+          <div style="display:flex;align-items:flex-start;gap:16px;min-width:0;">
+            ${collegeLogoUrl
+              ? `<div style="width:54px;height:54px;border-radius:12px;overflow:hidden;border:1px solid ${escapeHtml(borderColor)};background:${escapeHtml(t.bgSecondary || '#f8f9fa')};display:flex;align-items:center;justify-content:center;">
+                  <img src="${escapeHtml(collegeLogoUrl)}" alt="" style="width:100%;height:100%;object-fit:contain;" />
+                 </div>`
+              : `<div style="width:54px;height:54px;border-radius:12px;border:1px solid ${escapeHtml(borderColor)};background:${escapeHtml(primaryLight)};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:${escapeHtml(success)};">
+                  ${escapeHtml((college?.name || 'I').charAt(0))}
+                 </div>`
+            }
+            <div style="flex:1;min-width:0;">
+              <h1 style="font-size:18px;font-weight:800;margin:0;letter-spacing:-0.01em;color:${escapeHtml(textPrimary)};">${escapeHtml(collegeName)}</h1>
+              ${collegeAddress ? `<p style="font-size:10px;color:${escapeHtml(textTertiary)};margin:5px 0 0;">${escapeHtml(collegeAddress)}</p>` : ''}
+              ${collegeContact ? `<p style="font-size:10px;color:${escapeHtml(textTertiary)};margin:3px 0 0;">${escapeHtml(collegeContact)}</p>` : ''}
+            </div>
+          </div>
+
+          <div style="text-align:right;flex-shrink:0;">
+            <p style="font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:${escapeHtml(textTertiary)};margin:0 0 8px;">Income Receipt</p>
+            <p style="font-size:22px;font-weight:800;color:${escapeHtml(textPrimary)};margin:0;letter-spacing:0.02em;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
+              ${escapeHtml(receiptNum)}
+            </p>
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:5px 10px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;border:1px solid ${
+              income.isCancelled ? `rgba(239,68,68,0.25)` : `rgba(16,185,129,0.25)`
+            };background:${income.isCancelled ? 'rgba(239,68,68,0.10)' : 'rgba(16,185,129,0.10)'};color:${
+              income.isCancelled ? 'rgba(239,68,68,1)' : 'rgba(16,185,129,1)'
+            };">
+              <span style="width:6px;height:6px;border-radius:999px;background:${
+                income.isCancelled ? 'rgba(239,68,68,1)' : 'rgba(16,185,129,1)'
+              };"></span>
+              ${income.isCancelled ? 'Cancelled' : 'Active'}
+            </div>
+            <p style="font-size:10px;color:${escapeHtml(textTertiary)};margin:8px 0 0;">${escapeHtml(formatDateForDisplay(income.date))}</p>
+          </div>
+        </div>
+        <!-- Thin accent line -->
+        <div style="height:1px;background:linear-gradient(90deg,transparent,${escapeHtml(borderColor)},transparent);margin-top:22px;"></div>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:24px 28px;">
+
+        <!-- Title + Amount -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid ${escapeHtml(borderColor)};">
+          <div>
+            <p style="font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:${escapeHtml(textTertiary)};margin:0 0 6px;">Description</p>
+            <h2 style="font-size:17px;font-weight:600;color:${escapeHtml(textPrimary)};margin:0 0 4px;">${escapeHtml(income.title || 'Income')}</h2>
+            ${income.isCancelled ? `<span style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${escapeHtml(error)};background:rgba(239,68,68,0.10);padding:2px 8px;border-radius:999px;border:1px solid rgba(239,68,68,0.22);">Cancelled</span>` : `<span style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${escapeHtml(success)};background:rgba(16,185,129,0.10);padding:2px 8px;border-radius:999px;border:1px solid rgba(16,185,129,0.22);">Active</span>`}
+          </div>
+          <div style="text-align:right;background:${escapeHtml(primaryLight)};border:1px solid ${escapeHtml(borderColor)};border-radius:10px;padding:12px 18px;">
+            <p style="font-size:9px;letter-spacing:0.15em;text-transform:uppercase;color:${escapeHtml(textSecondary)};margin:0 0 4px;">Amount Received</p>
+            <p style="font-size:24px;font-weight:700;color:${escapeHtml(textPrimary)};margin:0;letter-spacing:-0.02em;">${escapeHtml(amountStr)}</p>
+          </div>
+        </div>
+
+        <!-- Recipient + Student -->
+        ${(hasRec || student) ? `
+        <div style="display:grid;grid-template-columns:${hasRec && student ? '1fr 1fr' : '1fr'};gap:14px;margin-bottom:22px;">
+          ${hasRec ? `
+          <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:6px 12px;">
+              <p style="font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#94a3b8;margin:0;">Received From</p>
+            </div>
+            <div style="padding:10px 12px;">
+              ${rec.name ? `<p style="font-weight:600;color:#0f172a;font-size:13px;margin:0 0 4px;">${escapeHtml(rec.name)}</p>` : ''}
+              ${rec.phone ? `<p style="font-size:11px;color:#64748b;margin:0;">${escapeHtml(rec.phone)}</p>` : ''}
+              ${rec.email ? `<p style="font-size:11px;color:#64748b;margin:0;">${escapeHtml(rec.email)}</p>` : ''}
+              ${rec.address ? `<p style="font-size:11px;color:#64748b;margin:4px 0 0;">${escapeHtml(rec.address)}</p>` : ''}
+            </div>
+          </div>` : ''}
+          ${student ? `
+          <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:6px 12px;">
+              <p style="font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#94a3b8;margin:0;">Student</p>
+            </div>
+            <div style="padding:10px 12px;">
+              <p style="font-weight:600;color:#0f172a;font-size:13px;margin:0 0 4px;">${escapeHtml(student.name || '')}</p>
+              ${(student.studentId || student.rollNumber) ? `<p style="font-size:11px;color:#64748b;margin:0;">ID: ${escapeHtml(student.studentId || student.rollNumber)}</p>` : ''}
+              ${courseName ? `<p style="font-size:11px;color:#64748b;margin:0;">${escapeHtml(courseName)}</p>` : ''}
+              ${student.email ? `<p style="font-size:11px;color:#64748b;margin:0;">${escapeHtml(student.email)}</p>` : ''}
+              ${student.phone ? `<p style="font-size:11px;color:#64748b;margin:0;">${escapeHtml(student.phone)}</p>` : ''}
+              ${student.address && formatAddress(student.address) ? `<p style="font-size:11px;color:#64748b;margin:4px 0 0;">${escapeHtml(formatAddress(student.address))}</p>` : ''}
+            </div>
+          </div>` : ''}
+        </div>` : ''}
+
+        <!-- Transaction details -->
+        <div style="margin-bottom:20px;">
+          <p style="font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#94a3b8;margin:0 0 8px;">Transaction Details</p>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px 0;color:#64748b;width:30%;">Date</td><td style="padding:7px 0;font-weight:500;color:#1e293b;">${escapeHtml(formatDateForDisplay(income.date))}</td></tr>
+            ${category ? `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px 0;color:#64748b;">Category</td><td style="padding:7px 0;font-weight:500;color:#1e293b;">${escapeHtml(category.name)}</td></tr>` : ''}
+            ${account ? `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px 0;color:#64748b;">Account</td><td style="padding:7px 0;font-weight:500;color:#1e293b;">${escapeHtml(account.name)}${account.accountNumber ? ` <span style="color:#94a3b8;">(${escapeHtml(account.accountNumber)})</span>` : ''}</td></tr>` : ''}
+            ${income.referenceNumber ? `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px 0;color:#64748b;">Reference #</td><td style="padding:7px 0;font-weight:500;color:#1e293b;font-family:monospace;">${escapeHtml(income.referenceNumber)}</td></tr>` : ''}
+            <tr><td style="padding:7px 0;color:#64748b;">Status</td><td style="padding:7px 0;"><span style="font-weight:600;color:${income.isCancelled ? '#ef4444' : '#059669'};">${income.isCancelled ? 'Cancelled' : 'Active'}</span></td></tr>
+          </table>
+        </div>
+
+        ${income.notes ? `
+        <div style="background:#f8fafc;border-left:3px solid #10b981;border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:16px;">
+          <p style="font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#94a3b8;margin:0 0 5px;">Notes</p>
+          <p style="font-size:12px;color:#475569;margin:0;white-space:pre-wrap;">${escapeHtml(income.notes)}</p>
+        </div>` : ''}
+
+        ${Array.isArray(income.files) && income.files.length > 0 ? `
+        <div style="margin-top:12px;">
+          <p style="font-size:9px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#94a3b8;margin:0 0 6px;">Attachments (${income.files.length})</p>
+          ${income.files.map(path => `<p style="font-size:11px;color:#0284c7;margin:2px 0;">${escapeHtml(path.split('/').pop() || path)}</p>`).join('')}
+        </div>` : ''}
+      </div>
+
+      <!-- Footer -->
+      <div style="border-top:1px solid #e2e8f0;padding:12px 28px;display:flex;justify-content:space-between;align-items:center;">
+        <p style="font-size:10px;color:#94a3b8;margin:0;">Generated on ${escapeHtml(formatDateForDisplay(new Date()))}</p>
+        <p style="font-size:10px;color:#cbd5e1;margin:0;">Computer-generated receipt • Not a tax invoice</p>
+      </div>
+    </div>
+  `;
+};
+
+// ── Main Component ──────────────────────────────────────────────────────────
+
 export default function IncomeDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -102,57 +289,42 @@ export default function IncomeDetailsPage() {
       const collegeData = collegeResponse?.data || collegeResponse;
       if (collegeData) setCollege(collegeData);
 
-      // Fetch category details if available
       if (data.category) {
         const categoryId = typeof data.category === 'object' ? data.category._id : data.category;
         if (categoryId) {
           try {
-            const categoryResponse = await api.get(`/finance/categories/${categoryId}`, {}, true);
-            const categoryData = categoryResponse?.data || categoryResponse;
-            setCategory(categoryData);
-          } catch (err) {
-            console.error('Failed to load category:', err);
-            if (typeof data.category === 'object') {
-              setCategory(data.category);
-            }
+            const res = await api.get(`/finance/categories/${categoryId}`, {}, true);
+            setCategory(res?.data || res);
+          } catch {
+            if (typeof data.category === 'object') setCategory(data.category);
           }
         } else if (typeof data.category === 'object') {
           setCategory(data.category);
         }
       }
 
-      // Fetch account details if available
       if (data.account) {
         const accountId = typeof data.account === 'object' ? data.account._id : data.account;
         if (accountId) {
           try {
-            const accountResponse = await api.get(`/finance/accounts/${accountId}`, {}, true);
-            const accountData = accountResponse?.data || accountResponse;
-            setAccount(accountData);
-          } catch (err) {
-            console.error('Failed to load account:', err);
-            if (typeof data.account === 'object') {
-              setAccount(data.account);
-            }
+            const res = await api.get(`/finance/accounts/${accountId}`, {}, true);
+            setAccount(res?.data || res);
+          } catch {
+            if (typeof data.account === 'object') setAccount(data.account);
           }
         } else if (typeof data.account === 'object') {
           setAccount(data.account);
         }
       }
 
-      // Fetch student details if available
       if (data.student) {
         const studentId = typeof data.student === 'object' ? data.student._id : data.student;
         if (studentId) {
           try {
-            const studentResponse = await api.get(`/students/${studentId}`, {}, true);
-            const studentData = studentResponse?.data || studentResponse;
-            setStudent(studentData);
-          } catch (err) {
-            console.error('Failed to load student:', err);
-            if (typeof data.student === 'object') {
-              setStudent(data.student);
-            }
+            const res = await api.get(`/students/${studentId}`, {}, true);
+            setStudent(res?.data || res);
+          } catch {
+            if (typeof data.student === 'object') setStudent(data.student);
           }
         } else if (typeof data.student === 'object') {
           setStudent(data.student);
@@ -170,189 +342,103 @@ export default function IncomeDetailsPage() {
     fetchIncomeDetails();
   }, [user?.college, incomeId, fetchIncomeDetails]);
 
-  // Export to CSV
+  // ── CSV Export ────────────────────────────────────────────────────────────
   const handleExportCSV = useCallback(() => {
     if (!income) return;
     setExporting(true);
     try {
-      const csvRows = [];
-      
-      csvRows.push(['Income Details']);
-      csvRows.push([]);
-      
-      csvRows.push(['Title', income.title || '']);
-      csvRows.push(['Amount', income.amount || 0]);
-      csvRows.push(['Date', formatDateForCSV(income.date)]);
-      csvRows.push(['Reference Number', income.referenceNumber || '']);
-      csvRows.push(['Status', income.isCancelled ? 'Cancelled' : 'Active']);
-      if (income.recipient && typeof income.recipient === 'object' && (income.recipient.name || income.recipient.phone || income.recipient.email || income.recipient.address)) {
-        csvRows.push(['Recipient', income.recipient.name || '']);
-        if (income.recipient.phone) csvRows.push(['Recipient Phone', income.recipient.phone]);
-        if (income.recipient.email) csvRows.push(['Recipient Email', income.recipient.email]);
-        if (income.recipient.address) csvRows.push(['Recipient Address', income.recipient.address]);
+      const csvRows = [
+        ['Income Details'],
+        [],
+        ['Title', income.title || ''],
+        ['Amount', income.amount || 0],
+        ['Date', formatDateForCSV(income.date)],
+        ['Reference Number', income.referenceNumber || ''],
+        ['Status', income.isCancelled ? 'Cancelled' : 'Active'],
+      ];
+      const rec = income.recipient && typeof income.recipient === 'object' ? income.recipient : {};
+      if (rec.name || rec.phone || rec.email || rec.address) {
+        csvRows.push(['Recipient', rec.name || '']);
+        if (rec.phone) csvRows.push(['Recipient Phone', rec.phone]);
+        if (rec.email) csvRows.push(['Recipient Email', rec.email]);
+        if (rec.address) csvRows.push(['Recipient Address', rec.address]);
       }
       csvRows.push([]);
-      
       if (category) {
-        csvRows.push(['Category Information']);
-        csvRows.push(['Name', category.name || '']);
-        csvRows.push(['Type', category.type || '']);
-        csvRows.push([]);
+        csvRows.push(['Category Information'], ['Name', category.name || ''], ['Type', category.type || ''], []);
       }
-      
       if (account) {
-        csvRows.push(['Account Information']);
-        csvRows.push(['Name', account.name || '']);
-        csvRows.push(['Account Number', account.accountNumber || '']);
-        csvRows.push(['Account Type', account.accountType || '']);
-        csvRows.push([]);
+        csvRows.push(['Account Information'], ['Name', account.name || ''], ['Account Number', account.accountNumber || ''], ['Account Type', account.accountType || ''], []);
       }
-      
       if (student) {
-        csvRows.push(['Student Information']);
-        csvRows.push(['Name', student.name || '']);
-        csvRows.push(['Student ID', student.studentId || student.rollNumber || '']);
-        csvRows.push([]);
+        csvRows.push(['Student Information'], ['Name', student.name || ''], ['Student ID', student.studentId || student.rollNumber || ''], []);
       }
-      
-      if (income.notes) {
-        csvRows.push(['Notes', income.notes]);
-      }
-      
-      const csvContent = csvRows.map((row) => 
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
-      ).join('\n');
-      
+      if (income.notes) csvRows.push(['Notes', income.notes]);
+
+      const csvContent = csvRows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `income-${income.title || incomeId}.csv`);
+      link.href = URL.createObjectURL(blob);
+      link.download = `income-${income.title || incomeId}.csv`;
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (err) {
-      console.error('Failed to export CSV:', err);
+    } catch {
       alert('Failed to export CSV');
     } finally {
       setExporting(false);
     }
   }, [income, category, account, student, incomeId]);
 
-  // Print function — receipt with college header and optimized layout
+  // ── Print ─────────────────────────────────────────────────────────────────
   const handlePrint = useCallback(() => {
     if (!income) return;
     const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Please allow popups to print');
-      return;
-    }
-    const rec = income.recipient && typeof income.recipient === 'object' ? income.recipient : {};
-    const hasRec = !!(rec.name || rec.phone || rec.email || rec.address);
-    const courseName = student?.course && (typeof student.course === 'object' ? student.course.name : null);
-    const collegeName = college?.name || 'College';
-    const collegeLogoUrl = college?.logo ? getLogoUrl(college.logo, API_URL, true) : '';
-    const collegeAddress = [college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean).join(' — ');
-    const collegeContact = [college?.phone, college?.email, college?.website].filter(Boolean).map((x) => escapeHtml(x)).join(' · ');
+    if (!printWindow) { alert('Please allow popups to print'); return; }
 
-    const receiptHtml = `
-    <div style="max-width:21cm;margin:0 auto;background:#fff;color:#0f172a;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;">
-      <!-- College header -->
-      <div style="display:flex;align-items:flex-start;gap:16px;padding:20px 24px 16px;border-bottom:2px solid #059669;">
-        ${collegeLogoUrl ? `<img src="${escapeHtml(collegeLogoUrl)}" alt="" style="width:56px;height:56px;object-fit:contain;border-radius:8px;border:1px solid #e2e8f0;" />` : `<div style="width:56px;height:56px;background:#ecfdf5;border-radius:8px;border:1px solid #a7f3d0;display:flex;align-items:center;justify-content:center;color:#059669;font-weight:700;font-size:20px;">₹</div>`}
-        <div style="flex:1;">
-          <h1 style="font-size:18px;font-weight:700;color:#0f172a;margin:0;">${escapeHtml(collegeName)}</h1>
-          ${collegeAddress ? `<p style="font-size:11px;color:#64748b;margin:4px 0 0;">${escapeHtml(collegeAddress)}</p>` : ''}
-          ${collegeContact ? `<p style="font-size:11px;color:#64748b;margin:4px 0 0;">${collegeContact}</p>` : ''}
-          <p style="font-size:11px;color:#64748b;margin:6px 0 0;font-weight:500;">Income Receipt</p>
-        </div>
-        <div style="text-align:right;font-size:11px;color:#64748b;">
-          <p style="margin:0;">Receipt # ${escapeHtml(income.referenceNumber || incomeId?.slice(-8) || '—')}</p>
-          <p style="margin:4px 0 0;">${escapeHtml(formatDateForDisplay(income.date))}</p>
-        </div>
-      </div>
+    // Read theme variables so print matches app theme.
+    const css = getComputedStyle(document.documentElement);
+    const theme = {
+      bgPrimary: css.getPropertyValue('--bg-primary')?.trim(),
+      textPrimary: css.getPropertyValue('--text-primary')?.trim(),
+      textSecondary: css.getPropertyValue('--text-secondary')?.trim(),
+      textTertiary: css.getPropertyValue('--text-tertiary')?.trim(),
+      borderColor: css.getPropertyValue('--border-color')?.trim(),
+      bgGradientStart: css.getPropertyValue('--bg-gradient-start')?.trim(),
+      bgGradientEnd: css.getPropertyValue('--bg-gradient-end')?.trim(),
+      success: css.getPropertyValue('--success')?.trim(),
+      error: css.getPropertyValue('--error')?.trim(),
+      primaryLight: css.getPropertyValue('--primary-light')?.trim(),
+    };
 
-      <!-- Title & amount -->
-      <div style="padding:20px 24px;">
-        <h2 style="font-size:20px;font-weight:600;color:#047857;margin:0 0 8px;">${escapeHtml(income.title || 'Income')}</h2>
-        ${income.isCancelled ? '<p style="margin:0 0 16px;font-size:12px;font-weight:600;color:#dc2626;">CANCELLED</p>' : ''}
-        <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
-          <p style="font-size:11px;letter-spacing:0.05em;color:#047857;margin:0 0 4px;">AMOUNT RECEIVED</p>
-          <p style="font-size:28px;font-weight:700;color:#047857;margin:0;">${escapeHtml(formatCurrency(income.amount ?? 0))}</p>
-        </div>
-
-        <!-- Recipient & Student -->
-        ${(hasRec || student) ? `
-        <div style="display:grid;grid-template-columns:${hasRec && student ? '1fr 1fr' : '1fr'};gap:16px;margin-bottom:20px;">
-          ${hasRec ? `
-          <div style="border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;">
-            <p style="font-size:10px;font-weight:600;letter-spacing:0.05em;color:#64748b;margin:0 0 8px;">RECEIVED FROM</p>
-            ${rec.name ? `<p style="font-weight:600;margin:0 0 4px;">${escapeHtml(rec.name)}</p>` : ''}
-            ${rec.phone ? `<p style="font-size:12px;color:#475569;margin:0;">${escapeHtml(rec.phone)}</p>` : ''}
-            ${rec.email ? `<p style="font-size:12px;color:#475569;margin:0;">${escapeHtml(rec.email)}</p>` : ''}
-            ${rec.address ? `<p style="font-size:12px;color:#475569;margin:4px 0 0;">${escapeHtml(rec.address)}</p>` : ''}
-          </div>
-          ` : ''}
-          ${student ? `
-          <div style="border:1px solid #e2e8f0;border-radius:6px;padding:12px 14px;">
-            <p style="font-size:10px;font-weight:600;letter-spacing:0.05em;color:#64748b;margin:0 0 8px;">STUDENT</p>
-            <p style="font-weight:600;margin:0 0 4px;">${escapeHtml(student.name || '')}</p>
-            ${(student.studentId || student.rollNumber) ? `<p style="font-size:12px;color:#475569;margin:0;">ID: ${escapeHtml(student.studentId || student.rollNumber)}</p>` : ''}
-            ${courseName ? `<p style="font-size:12px;color:#475569;margin:0;">${escapeHtml(courseName)}</p>` : ''}
-            ${student.email ? `<p style="font-size:12px;color:#475569;margin:0;">${escapeHtml(student.email)}</p>` : ''}
-            ${student.phone ? `<p style="font-size:12px;color:#475569;margin:0;">${escapeHtml(student.phone)}</p>` : ''}
-            ${student.address && formatAddress(student.address) ? `<p style="font-size:12px;color:#475569;margin:4px 0 0;">${escapeHtml(formatAddress(student.address))}</p>` : ''}
-          </div>
-          ` : ''}
-        </div>
-        ` : ''}
-
-        <!-- Payment details table -->
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;">
-          <tr><td style="padding:6px 0;color:#64748b;width:28%;">Date</td><td style="padding:6px 0;font-weight:500;">${escapeHtml(formatDateForDisplay(income.date))}</td></tr>
-          ${category ? `<tr><td style="padding:6px 0;color:#64748b;">Category</td><td style="padding:6px 0;font-weight:500;">${escapeHtml(category.name)}</td></tr>` : ''}
-          ${account ? `<tr><td style="padding:6px 0;color:#64748b;">Account</td><td style="padding:6px 0;font-weight:500;">${escapeHtml(account.name)}${account.accountNumber ? ' (' + escapeHtml(account.accountNumber) + ')' : ''}</td></tr>` : ''}
-          ${income.referenceNumber ? `<tr><td style="padding:6px 0;color:#64748b;">Reference</td><td style="padding:6px 0;font-weight:500;">${escapeHtml(income.referenceNumber)}</td></tr>` : ''}
-          <tr><td style="padding:6px 0;color:#64748b;">Status</td><td style="padding:6px 0;font-weight:500;">${income.isCancelled ? 'Cancelled' : 'Active'}</td></tr>
-        </table>
-
-        ${income.notes ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px;">NOTES</p><p style="font-size:13px;margin:0 0 16px;white-space:pre-wrap;color:#334155;">${escapeHtml(income.notes)}</p>` : ''}
-        ${Array.isArray(income.files) && income.files.length > 0 ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px;">ATTACHMENTS</p><ul style="font-size:12px;margin:0 0 16px;padding-left:18px;color:#475569;">${income.files.map((path) => `<li>${escapeHtml(path.split('/').pop() || path)}</li>`).join('')}</ul>` : ''}
-      </div>
-
-      <div style="border-top:1px solid #e2e8f0;padding:12px 24px;text-align:center;font-size:11px;color:#94a3b8;">
-        <p style="margin:0;">Generated on ${escapeHtml(formatDateForDisplay(new Date()))} · Computer-generated receipt</p>
-      </div>
-    </div>
-    `;
-
+    const html = buildPrintHtml({ income, college, category, account, student, incomeId, theme });
     printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Income Receipt - ${escapeHtml(income.title || 'Details')}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { background: #fff; padding: 12px; }
-            @media print { body { padding: 0; } @page { size: A4; margin: 1cm; } }
-          </style>
-        </head>
-        <body>${receiptHtml}</body>
-      </html>
+      <!DOCTYPE html><html>
+      <head>
+        <title>Receipt #${escapeHtml(formatReceiptNumber(income.serialNumber) || income.title || 'Details')}</title>
+        <style>
+          *{margin:0;padding:0;box-sizing:border-box;}
+          body{background:#fff;padding:0;}
+          @media print{body{padding:0;}@page{size:A4;margin:0.8cm;}}
+        </style>
+      </head>
+      <body>${html}</body></html>
     `);
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 250);
-  }, [income, incomeId, category, account, student, college]);
+  }, [income, college, category, account, student, incomeId]);
 
+  // ── States ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading income details...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="relative mx-auto w-12 h-12">
+          <div className="absolute inset-0 rounded-full border-2 border-border-color" />
+          <div className="absolute inset-0 rounded-full border-2 border-t-[color:var(--primary)] animate-spin" />
           </div>
+          <p className="text-sm text-text-tertiary tracking-wide">Loading receipt…</p>
         </div>
       </div>
     );
@@ -360,218 +446,302 @@ export default function IncomeDetailsPage() {
 
   if (error || !income) {
     return (
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <p className="text-destructive mb-4">{error || 'Income not found'}</p>
-            <Button onClick={() => router.push('/app/finance')} className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Finance
-            </Button>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4 max-w-xs">
+          <div className="mx-auto w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+            <XCircle className="w-6 h-6 text-red-500" />
           </div>
+          <p className="text-text-secondary">{error || 'Income not found'}</p>
+          <Button onClick={() => router.push('/app/finance')} variant="outline" className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Finance
+          </Button>
         </div>
       </div>
     );
   }
 
-  const hasRecipient = income.recipient && typeof income.recipient === 'object' && (income.recipient.name || income.recipient.phone || income.recipient.email || income.recipient.address);
+  const hasRecipient = income.recipient && typeof income.recipient === 'object'
+    && (income.recipient.name || income.recipient.phone || income.recipient.email || income.recipient.address);
   const recipient = income.recipient && typeof income.recipient === 'object' ? income.recipient : {};
-  const courseName = student?.course && (typeof student.course === 'object' ? student.course.name : null);
+  const courseName = student?.course && typeof student.course === 'object' ? student.course.name : null;
+  const receiptNum = formatReceiptNumber(income.serialNumber);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Toolbar — no print */}
+    <div className="max-w-4xl mx-auto space-y-5 pb-12">
+
+      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="icon" onClick={() => router.push('/app/finance/tracking/income')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full border border-border-color hover:bg-bg-secondary text-text-secondary"
+            onClick={() => router.push('/app/finance/tracking/income')}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold">Income Receipt</h1>
-              {income.isCancelled && (
-                <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
-                  Cancelled
+              <h1 className="text-lg font-semibold text-text-primary tracking-tight">Income Receipt</h1>
+              {income.isCancelled ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--error)]/10 border-[color:var(--error)]/25 px-2.5 py-0.5 text-xs font-semibold text-[color:var(--error)]">
+                  <XCircle className="w-3 h-3" /> Cancelled
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--success)]/10 border-[color:var(--success)]/25 px-2.5 py-0.5 text-xs font-semibold text-[color:var(--success)]">
+                  <CheckCircle2 className="w-3 h-3" /> Active
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">{income.referenceNumber || incomeId}</p>
+            <p className="text-xs text-text-tertiary font-mono mt-0.5">
+              {receiptNum ? `#${receiptNum}` : income.referenceNumber || incomeId}
+            </p>
           </div>
         </div>
+
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchIncomeDetails()} disabled={loading} className="gap-2">
-            <RefreshCcw className="h-4 w-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchIncomeDetails}
+            disabled={loading}
+            className="gap-1.5 h-9 text-text-secondary border-border-color hover:bg-bg-secondary"
+          >
+            <RefreshCcw className="h-3.5 w-3.5" />
             Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={exporting} className="gap-2">
-            <Download className="h-4 w-4" />
-            {exporting ? 'Exporting...' : 'Export CSV'}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCSV}
+            disabled={exporting}
+            className="gap-1.5 h-9 text-text-secondary border-border-color hover:bg-bg-secondary"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {exporting ? 'Exporting…' : 'Export CSV'}
           </Button>
-          <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2">
-            <Printer className="h-4 w-4" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrint}
+            className="gap-1.5 h-9 text-text-secondary border-border-color hover:bg-bg-secondary"
+          >
+            <Printer className="h-3.5 w-3.5" />
             Print
           </Button>
-          {!income.isCancelled && (
-            <Button size="sm" onClick={() => router.push(`/app/finance?editIncome=${incomeId}`)} className="gap-2">
-              <Edit2 className="h-4 w-4" />
-              Edit
-            </Button>
-          )}
+          
         </div>
       </div>
 
-      {/* Receipt — printable, with college header */}
+      {/* ── Receipt Card ────────────────────────────────────────────────── */}
       <div
         ref={printRef}
-        className="receipt-paper bg-white dark:bg-white text-slate-900 shadow-lg border border-slate-200 rounded-lg print:shadow-none print:border print:rounded-none print:max-w-none overflow-hidden"
-        style={{ maxWidth: '21cm' }}
+        className="bg-bg-primary text-text-primary rounded-xl overflow-hidden shadow-md border border-border-color print:shadow-none print:rounded-none"
       >
-        {/* College header */}
-        <div className="flex items-start gap-4 px-6 sm:px-8 py-4 border-b-2 border-emerald-600">
-          {college?.logo ? (
-            <img
-              src={getLogoUrl(college.logo, API_URL, true)}
-              alt=""
-              className="h-14 w-14 object-contain rounded-lg border border-slate-200 shrink-0"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-lg border border-emerald-200 bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xl shrink-0">
-              ₹
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold text-slate-900">{college?.name || 'College'}</h2>
-            {(college?.address || college?.city || college?.state || college?.pincode) && (
-              <p className="text-xs text-slate-500 mt-1">
-                {[college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean).join(' — ')}
-              </p>
-            )}
-            {(college?.phone || college?.email || college?.website) && (
-              <div className="flex flex-wrap gap-x-3 gap-y-0 mt-1.5 text-xs text-slate-500">
-                {college?.phone && <span>{college.phone}</span>}
-                {college?.email && <span>{college.email}</span>}
-                {college?.website && <span>{college.website}</span>}
-              </div>
-            )}
-            <p className="text-xs text-slate-500 mt-1 font-medium">Income Receipt</p>
-          </div>
-          <div className="text-right shrink-0 text-sm">
-            <p className="font-medium text-slate-700">Receipt # {income.referenceNumber || incomeId?.slice(-8) || '—'}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{formatDateForDisplay(income.date)}</p>
-          </div>
-        </div>
-
-        {/* Title & amount */}
-        <div className="px-6 sm:px-8 py-5">
-          <h3 className="text-xl font-semibold text-emerald-700">{income.title || 'Income'}</h3>
-          {income.isCancelled && (
-            <span className="inline-block mt-1 text-xs font-semibold text-red-600">CANCELLED</span>
-          )}
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4">
-            <p className="text-xs font-medium uppercase tracking-wider text-emerald-700/90 mb-1">Amount Received</p>
-            <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{formatCurrency(income.amount ?? 0)}</p>
-          </div>
-        </div>
-
-        {/* Recipient & Student */}
-        <div className="px-6 sm:px-8 pb-5">
-          {(hasRecipient || student) && (
-            <div className={`grid gap-4 mb-5 ${hasRecipient && student ? 'sm:grid-cols-2' : ''}`}>
-              {hasRecipient && (
-                <div className="receipt-block rounded-lg border border-slate-200 p-3.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Received From</p>
-                  {recipient.name && <p className="font-semibold text-slate-900">{recipient.name}</p>}
-                  {recipient.phone && <p className="text-sm text-slate-600">{recipient.phone}</p>}
-                  {recipient.email && <p className="text-sm text-slate-600">{recipient.email}</p>}
-                  {recipient.address && <p className="text-sm text-slate-600 mt-1">{recipient.address}</p>}
+        {/* Header — Payment Receipt-style */}
+        <div className="px-8 pt-8 pb-7 border-b border-border-color">
+          <div className="flex items-start justify-between gap-6">
+            {/* Brand */}
+            <div className="flex items-start gap-4 min-w-0">
+              {college?.logo ? (
+                <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden bg-bg-secondary border border-border-color flex items-center justify-center">
+                  <img src={getLogoUrl(college.logo, API_URL, true)} alt={college?.name} className="w-full h-full object-contain" />
                 </div>
+              ) : (
+                <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-primary-light border border-border-color flex items-center justify-center text-[color:var(--success)] font-bold text-2xl font-serif">
+                  {(college?.name || 'I').charAt(0)}
+                </div>
+              )}
+              <div className="min-w-0 pt-0.5">
+                <h2 className="text-lg font-bold text-text-primary leading-tight">{college?.name || 'Institution Name'}</h2>
+                {(college?.address || college?.city) && (
+                  <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
+                    {[college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean).join(' • ')}
+                  </p>
+                )}
+                {(college?.phone || college?.email || college?.website) && (
+                  <div className="flex flex-wrap gap-3 mt-1">
+                    {college?.phone && <span className="text-xs text-text-tertiary">{college.phone}</span>}
+                    {college?.email && <span className="text-xs text-text-tertiary">{college.email}</span>}
+                    {college?.website && <span className="text-xs text-text-tertiary">{college.website}</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Receipt identity */}
+            <div className="flex-shrink-0 text-right">
+              <p className="text-[10px] font-bold tracking-[0.15em] text-text-tertiary uppercase mb-1">Income Receipt</p>
+              <p className="text-2xl font-bold text-text-primary tabular-nums">{receiptNum || '—'}</p>
+              <span
+                className={`inline-flex items-center gap-1 mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold border tracking-wide uppercase ${
+                  income.isCancelled
+                    ? 'bg-[color:var(--error)]/10 border-[color:var(--error)]/25 text-[color:var(--error)]'
+                    : 'bg-[color:var(--success)]/10 border-[color:var(--success)]/25 text-[color:var(--success)]'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    income.isCancelled ? 'bg-[color:var(--error)]' : 'bg-[color:var(--success)]'
+                  }`}
+                />
+                {income.isCancelled ? 'Cancelled' : 'Active'}
+              </span>
+              <p className="text-xs text-text-tertiary mt-2">{formatDateForDisplay(income.date)}</p>
+            </div>
+          </div>
+
+          {/* Thin accent line */}
+          <div className="h-px bg-gradient-to-r from-transparent via-[color:var(--border-color-hover)] to-transparent mt-5" />
+        </div>
+
+        {/* Body */}
+        <div className="px-6 sm:px-8 py-6 space-y-6">
+
+          {/* Title + Amount row */}
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-text-tertiary">Description</p>
+              <h3 className="text-xl font-bold text-text-primary leading-tight">{income.title || 'Income'}</h3>
+            </div>
+
+            <div className="sm:text-right bg-primary-light border border-border-color rounded-xl px-5 py-4 shrink-0">
+              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-text-secondary mb-1.5">Amount Received</p>
+              <p className="text-3xl font-bold text-text-primary leading-none tracking-tight">
+                {formatCurrency(income.amount ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          {/* Recipient + Student */}
+          {(hasRecipient || student) && (
+            <div className={`grid gap-4 ${hasRecipient && student ? 'sm:grid-cols-2' : ''}`}>
+              {hasRecipient && (
+                <InfoCard title="Received From">
+                  {recipient.name && <p className="text-sm font-semibold text-text-primary">{recipient.name}</p>}
+                  {recipient.phone && <p className="text-sm text-text-secondary">{recipient.phone}</p>}
+                  {recipient.email && <p className="text-sm text-text-secondary">{recipient.email}</p>}
+                  {recipient.address && <p className="text-sm text-text-secondary mt-1">{recipient.address}</p>}
+                </InfoCard>
               )}
               {student && (
-                <div className="receipt-block rounded-lg border border-slate-200 p-3.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Student</p>
-                  <p className="font-semibold text-slate-900">{student.name}</p>
+                <InfoCard title="Student">
+                  <p className="text-sm font-semibold text-text-primary">{student.name}</p>
                   {(student.studentId || student.rollNumber) && (
-                    <p className="text-sm text-slate-600">ID: {student.studentId || student.rollNumber}</p>
+                    <p className="text-sm text-text-secondary">ID: {student.studentId || student.rollNumber}</p>
                   )}
-                  {courseName && <p className="text-sm text-slate-600">{courseName}</p>}
-                  {student.email && <p className="text-sm text-slate-600">{student.email}</p>}
-                  {student.phone && <p className="text-sm text-slate-600">{student.phone}</p>}
-                  {student.alternatePhone && <p className="text-sm text-slate-600">{student.alternatePhone}</p>}
+                  {courseName && <p className="text-sm text-text-secondary">{courseName}</p>}
+                  {student.email && <p className="text-sm text-text-secondary">{student.email}</p>}
+                  {student.phone && <p className="text-sm text-text-secondary">{student.phone}</p>}
+                  {student.alternatePhone && <p className="text-sm text-text-secondary">{student.alternatePhone}</p>}
                   {student.address && formatAddress(student.address) && (
-                    <p className="text-sm text-slate-600 mt-1">{formatAddress(student.address)}</p>
+                    <p className="text-sm text-text-secondary mt-1">{formatAddress(student.address)}</p>
                   )}
-                </div>
+                </InfoCard>
               )}
             </div>
           )}
 
-          {/* Payment details — compact table */}
-          <div className="receipt-block text-sm">
-            <table className="w-full">
-              <tbody>
-                <tr><td className="py-1.5 text-slate-500 w-28">Date</td><td className="py-1.5 font-medium">{formatDateForDisplay(income.date)}</td></tr>
-                {category && <tr><td className="py-1.5 text-slate-500">Category</td><td className="py-1.5 font-medium">{category.name}</td></tr>}
-                {account && <tr><td className="py-1.5 text-slate-500">Account</td><td className="py-1.5 font-medium">{account.name}{account.accountNumber ? ` (${account.accountNumber})` : ''}</td></tr>}
-                {income.referenceNumber && <tr><td className="py-1.5 text-slate-500">Reference</td><td className="py-1.5 font-medium">{income.referenceNumber}</td></tr>}
-                <tr><td className="py-1.5 text-slate-500">Status</td><td className="py-1.5 font-medium">{income.isCancelled ? 'Cancelled' : 'Active'}</td></tr>
-              </tbody>
-            </table>
+          {/* Transaction details */}
+          <div className="rounded-xl border border-border-color overflow-hidden bg-bg-primary">
+            <div className="bg-bg-secondary border-b border-border-color px-4 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-tertiary">Transaction Details</p>
+            </div>
+            <div className="px-4 divide-y divide-border-color">
+              <DetailRow label="Date" value={formatDateForDisplay(income.date)} />
+              {category && <DetailRow label="Category" value={category.name} />}
+              {account && (
+                <DetailRow
+                  label="Account"
+                  value={`${account.name}${account.accountNumber ? ` (${account.accountNumber})` : ''}`}
+                />
+              )}
+              {income.referenceNumber && (
+                <div className="flex items-baseline justify-between py-2.5 border-b border-border-color last:border-0">
+                  <span className="text-xs font-medium text-text-tertiary uppercase tracking-widest shrink-0 w-28">Reference</span>
+                  <span className="text-sm font-mono font-medium text-text-secondary text-right">{income.referenceNumber}</span>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between py-2.5">
+                <span className="text-xs font-medium text-text-tertiary uppercase tracking-widest shrink-0 w-28">Status</span>
+                <span className={`text-sm font-semibold ${income.isCancelled ? 'text-[color:var(--error)]' : 'text-[color:var(--success)]'}`}>
+                  {income.isCancelled ? 'Cancelled' : 'Active'}
+                </span>
+              </div>
+            </div>
           </div>
 
+          {/* Notes */}
           {income.notes && (
-            <div className="receipt-block mt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Notes</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{income.notes}</p>
+            <div className="rounded-xl bg-bg-secondary border-l-4 border-[color:var(--success)] pl-4 pr-5 py-4">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-tertiary mb-1.5">Notes</p>
+              <p className="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">{income.notes}</p>
             </div>
           )}
 
+          {/* Attachments */}
           {Array.isArray(income.files) && income.files.length > 0 && (
-            <div className="receipt-block mt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Attachments</p>
-              <ul className="text-sm space-y-0.5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-text-tertiary mb-2">
+                Attachments ({income.files.length})
+              </p>
+              <div className="space-y-1.5">
                 {income.files.map((path, index) => (
-                  <li key={`${path}-${index}`}>
-                    <a href={getUploadedImageUrl(path, API_URL)} target="_blank" rel="noopener noreferrer" className="text-emerald-700 hover:underline">
-                      {path.split('/').pop() || path}
-                    </a>
-                  </li>
+                  <a
+                    key={`${path}-${index}`}
+                    href={getUploadedImageUrl(path, API_URL)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-[color:var(--primary)] hover:underline"
+                  >
+                    <Download className="h-3.5 w-3.5 shrink-0 opacity-60" />
+                    {path.split('/').pop() || path}
+                  </a>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="border-t border-slate-200 px-6 sm:px-8 py-3 text-center text-xs text-slate-400">
-          Generated on {formatDateForDisplay(new Date())} · Computer-generated receipt
+        {/* Footer */}
+        <div className="border-t border-border-color px-6 sm:px-8 py-3 flex flex-wrap items-center justify-between gap-2 bg-bg-secondary">
+          <p className="text-[11px] text-text-tertiary">
+            Generated on {formatDateForDisplay(new Date())}
+          </p>
+          <p className="text-[11px] text-text-tertiary">Computer-generated receipt • Not a tax invoice</p>
         </div>
       </div>
 
-      {/* Stats — no print */}
+      {/* ── Stats ────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Income Amount</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">
-                {formatCurrency(income.amount || 0)}
-              </p>
-            </div>
-            <DollarSign className="h-8 w-8 text-green-600 opacity-50" />
+        <div className="rounded-xl bg-bg-primary border border-border-color shadow-sm p-5 flex items-center gap-4">
+          <div className="h-11 w-11 rounded-xl bg-primary-light border border-border-color flex items-center justify-center shrink-0">
+            <DollarSign className="h-5 w-5 text-[color:var(--success)]" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Income Amount</p>
+            <p className="text-xl font-bold text-text-primary mt-0.5 leading-tight">
+              {formatCurrency(income.amount || 0)}
+            </p>
           </div>
         </div>
-        <div className="bg-card border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Status</p>
-              <p className="text-2xl font-bold mt-1 capitalize">
-                {income.isCancelled ? 'Cancelled' : 'Active'}
-              </p>
-            </div>
-            <TrendingUp className="h-8 w-8 text-primary opacity-50" />
+
+        <div className="rounded-xl bg-bg-primary border border-border-color shadow-sm p-5 flex items-center gap-4">
+          <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${income.isCancelled ? 'bg-[color:var(--error)]/10 border border-[color:var(--error)]/20' : 'bg-bg-secondary border border-border-color'}`}>
+            {income.isCancelled
+              ? <XCircle className="h-5 w-5 text-red-500" />
+              : <CheckCircle2 className="h-5 w-5 text-[color:var(--success)]" />
+            }
+          </div>
+          <div>
+            <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">Status</p>
+            <p className={`text-xl font-bold mt-0.5 leading-tight ${income.isCancelled ? 'text-[color:var(--error)]' : 'text-text-primary'}`}>
+              {income.isCancelled ? 'Cancelled' : 'Active'}
+            </p>
           </div>
         </div>
       </div>
     </div>
   );
 }
-

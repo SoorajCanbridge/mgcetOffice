@@ -63,21 +63,21 @@ const PRINT_STYLES = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    padding: 24px;
+    padding: 16px;
     color: #1e293b;
     background: #fff;
-    line-height: 1.5;
-    font-size: 14px;
+    line-height: 1.4;
+    font-size: 12px;
   }
   .print-container { max-width: 210mm; margin: 0 auto; }
   .print-college-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 24px;
-    padding: 20px 0 24px;
+    gap: 18px;
+    padding: 14px 0 16px;
     border-bottom: 2px solid #1e40af;
-    margin-bottom: 28px;
+    margin-bottom: 16px;
   }
   .print-college-brand { display: flex; align-items: flex-start; gap: 16px; }
   .print-college-logo {
@@ -96,8 +96,8 @@ const PRINT_STYLES = `
     font-size: 24px;
     font-weight: 700;
   }
-  .print-college-info h1 { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
-  .print-college-info .sub { font-size: 12px; color: #64748b; line-height: 1.5; }
+  .print-college-info h1 { font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+  .print-college-info .sub { font-size: 11px; color: #64748b; line-height: 1.4; }
   .print-college-info .contact { font-size: 11px; color: #64748b; margin-top: 6px; }
   .print-invoice-meta { text-align: right; }
   .print-invoice-meta .label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
@@ -116,26 +116,26 @@ const PRINT_STYLES = `
   .print-invoice-meta .status.overdue { background: #ef4444; color: #fff; }
   .print-invoice-meta .status.sent { background: #3b82f6; color: #fff; }
   .print-invoice-meta .status.draft { background: #94a3b8; color: #fff; }
-  .print-title { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; margin-bottom: 24px; }
-  .print-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 28px; }
+  .print-title { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; margin-bottom: 14px; }
+  .print-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 16px; }
   .print-section h3 { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
-  .print-section p { font-size: 14px; color: #1e293b; margin-bottom: 6px; }
+  .print-section p { font-size: 12px; color: #1e293b; margin-bottom: 4px; }
   .print-section strong { font-weight: 600; color: #0f172a; }
-  .print-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .print-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
   .print-table thead { background: #f8fafc; }
-  .print-table th { padding: 12px 10px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }
-  .print-table td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b; }
+  .print-table th { padding: 7px 6px; text-align: left; font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }
+  .print-table td { padding: 7px 6px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #1e293b; }
   .print-table .tr-right { text-align: right; }
-  .print-summary { margin-left: auto; width: 280px; }
-  .print-summary-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; color: #475569; }
-  .print-summary-row.total { border-top: 2px solid #e2e8f0; margin-top: 8px; padding-top: 14px; font-size: 17px; font-weight: 700; color: #0f172a; }
-  .print-summary-row.balance { border-top: 1px solid #e2e8f0; margin-top: 6px; padding-top: 12px; font-size: 15px; font-weight: 600; }
+  .print-summary { margin-left: auto; width: 240px; }
+  .print-summary-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; color: #475569; }
+  .print-summary-row.total { border-top: 2px solid #e2e8f0; margin-top: 6px; padding-top: 10px; font-size: 14px; font-weight: 700; color: #0f172a; }
+  .print-summary-row.balance { border-top: 1px solid #e2e8f0; margin-top: 4px; padding-top: 8px; font-size: 13px; font-weight: 600; }
   .print-summary-row.balance.positive { color: #ef4444; }
   .print-summary-row.balance.negative { color: #10b981; }
-  .print-notes { margin-top: 28px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+  .print-notes { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
   .print-notes h3 { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; margin-bottom: 8px; }
-  .print-notes p { font-size: 13px; color: #475569; line-height: 1.6; }
-  .print-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 11px; }
+  .print-notes p { font-size: 11px; color: #475569; line-height: 1.5; }
+  .print-footer { margin-top: 20px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 10px; }
   @media print {
     body { padding: 12px; }
     .no-print { display: none !important; }
@@ -160,6 +160,20 @@ export default function InvoiceDetailsPage() {
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  const getItemTotalWithTax = useCallback((inv, item, subtotal, taxAmount) => {
+    if (!inv || !item) return 0;
+    const amount = Number(item.amount) || 0;
+    const discount = Number(item.discount) || 0;
+    const netAmount = Math.max(0, amount - discount);
+    const method = inv.taxCalculationMethod || 'total';
+    if (method === 'product') {
+      return netAmount + (Number(item.taxAmount) || 0);
+    }
+    const invSubtotal = subtotal || (inv.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    if (!invSubtotal || invSubtotal <= 0) return netAmount;
+    return netAmount + (amount / invSubtotal) * (taxAmount || 0);
+  }, []);
 
   const collegeLogoUrl = useMemo(() => {
     if (!college?.logo) return '';
@@ -300,6 +314,11 @@ export default function InvoiceDetailsPage() {
     };
   }, [invoice]);
 
+  const hasItemDiscount = useMemo(
+    () => (invoice?.items || []).some((item) => (Number(item.discount) || 0) > 0),
+    [invoice?.items]
+  );
+
   const getPrintBodyHtml = useCallback(() => {
     if (!invoice) return '';
     const statusClass = invoice.status === 'paid' ? 'paid' : invoice.status === 'overdue' ? 'overdue' : invoice.status === 'sent' ? 'sent' : invoice.status === 'pending' ? 'pending' : 'draft';
@@ -313,22 +332,29 @@ export default function InvoiceDetailsPage() {
     let rows = '';
     (invoice.items || []).forEach((item, i) => {
       const itemAmount = item.amount || 0;
+      const itemDiscount = Number(item.discount) || 0;
+      const itemTotalWithTax = getItemTotalWithTax(invoice, item, totals?.subtotal || 0, totals?.taxAmount || 0);
       const itemPaid = item.paidAmount || 0;
-      const itemBalance = itemAmount - itemPaid;
+      const itemBalance = itemTotalWithTax - itemPaid;
       const taxCols = totals?.taxCalculationMethod === 'product'
         ? `<td class="tr-right">${item.taxRate ? item.taxRate + '%' : '-'}</td><td class="tr-right">${formatCurrency(item.taxAmount || 0)}</td>`
+        : '';
+      const discountCol = hasItemDiscount
+        ? `<td class="tr-right">${itemDiscount > 0 ? `-${formatCurrency(itemDiscount)}` : '-'}</td>`
         : '';
       rows += `<tr>
         <td>${(item.description || '-').replace(/</g, '&lt;')}</td>
         <td class="tr-right">${item.quantity || 0}</td>
         <td class="tr-right">${formatCurrency(item.unitPrice || 0)}</td>
         <td class="tr-right">${formatCurrency(itemAmount)}</td>
+        ${discountCol}
         ${taxCols}
         <td class="tr-right">${formatCurrency(itemPaid)}</td>
         <td class="tr-right">${formatCurrency(itemBalance)}</td>
       </tr>`;
     });
 
+    const discountHeader = hasItemDiscount ? '<th class="tr-right">Discount</th>' : '';
     const taxHeader = totals?.taxCalculationMethod === 'product'
       ? '<th class="tr-right">Tax Rate</th><th class="tr-right">Tax Amount</th>'
       : '';
@@ -377,6 +403,7 @@ export default function InvoiceDetailsPage() {
             <th class="tr-right">Qty</th>
             <th class="tr-right">Unit Price</th>
             <th class="tr-right">Amount</th>
+            ${discountHeader}
             ${taxHeader}
             <th class="tr-right">Paid</th>
             <th class="tr-right">Balance</th>
@@ -404,7 +431,7 @@ export default function InvoiceDetailsPage() {
         <p style="margin-top:6px">Generated on ${formatDateForDisplay(new Date())}</p>
       </div>
     `;
-  }, [invoice, college, collegeLogoUrl, student, account, totals]);
+  }, [invoice, college, collegeLogoUrl, student, account, totals, getItemTotalWithTax, hasItemDiscount]);
 
   // Export to CSV
   const handleExportCSV = useCallback(() => {
@@ -446,13 +473,23 @@ export default function InvoiceDetailsPage() {
       // Items
       if (invoice.items && invoice.items.length > 0) {
         csvRows.push(['Items']);
-        csvRows.push(['Description', 'Quantity', 'Unit Price', 'Amount']);
+        csvRows.push(['Description', 'Quantity', 'Unit Price', 'Amount', 'Item Discount', 'Item Tax', 'Item Total (incl. tax)']);
         invoice.items.forEach((item) => {
+          const amount = Number(item.amount) || 0;
+          const itemDiscount = Number(item.discount) || 0;
+          const itemTax =
+            totals?.taxCalculationMethod === 'product'
+              ? (Number(item.taxAmount) || 0)
+              : (totals?.subtotal ? (amount / totals.subtotal) * (totals.taxAmount || 0) : 0);
+          const itemTotal = Math.max(0, amount - itemDiscount) + itemTax;
           csvRows.push([
             item.description || '',
             item.quantity || 0,
             item.unitPrice || 0,
-            item.amount || 0,
+            amount,
+            itemDiscount,
+            itemTax,
+            itemTotal,
           ]);
         });
         csvRows.push([]);
@@ -679,14 +716,7 @@ export default function InvoiceDetailsPage() {
             <CreditCard className="h-4 w-4" />
             Record Payment
           </Button>
-          <Button
-            variant="default"
-            onClick={() => router.push(`/app/invoices?edit=${invoiceId}`)}
-            className="gap-2"
-          >
-            <Edit2 className="h-4 w-4" />
-            Edit
-          </Button>
+
         </div>
       </div>
 
@@ -822,32 +852,37 @@ export default function InvoiceDetailsPage() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-muted border-b-2 border-border">
-                  <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <th className="text-left p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Description
                   </th>
-                  <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Quantity
                   </th>
-                  <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Unit Price
                   </th>
-                  <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Amount
                   </th>
+                  {hasItemDiscount && (
+                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Discount
+                    </th>
+                  )}
                   {totals?.taxCalculationMethod === 'product' && (
                     <>
-                      <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                         Tax Rate
                       </th>
-                      <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                         Tax Amount
                       </th>
                     </>
                   )}
-                  <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Paid
                   </th>
-                  <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Balance
                   </th>
                 </tr>
@@ -855,32 +890,39 @@ export default function InvoiceDetailsPage() {
               <tbody>
                 {invoice.items.map((item, index) => {
                   const itemAmount = item.amount || 0;
+                  const itemDiscount = Number(item.discount) || 0;
+                  const itemTotalWithTax = getItemTotalWithTax(invoice, item, totals?.subtotal || 0, totals?.taxAmount || 0);
                   const itemPaid = item.paidAmount || 0;
-                  const itemBalance = itemAmount - itemPaid;
+                  const itemBalance = itemTotalWithTax - itemPaid;
                   return (
                     <tr key={index} className="border-b border-border hover:bg-muted/50">
-                      <td className="p-4 font-medium">{item.description || '-'}</td>
-                      <td className="p-4 text-right">{item.quantity || 0}</td>
-                      <td className="p-4 text-right">{formatCurrency(item.unitPrice || 0)}</td>
-                      <td className="p-4 text-right font-semibold">
+                      <td className="p-2 text-sm font-medium">{item.description || '-'}</td>
+                      <td className="p-2 text-sm text-right">{item.quantity || 0}</td>
+                      <td className="p-2 text-sm text-right">{formatCurrency(item.unitPrice || 0)}</td>
+                      <td className="p-2 text-sm text-right font-semibold">
                         {formatCurrency(itemAmount)}
                       </td>
+                      {hasItemDiscount && (
+                        <td className="p-2 text-sm text-right text-muted-foreground">
+                          {itemDiscount > 0 ? `-${formatCurrency(itemDiscount)}` : '-'}
+                        </td>
+                      )}
                       {totals?.taxCalculationMethod === 'product' && (
                         <>
-                          <td className="p-4 text-right text-muted-foreground">
+                          <td className="p-2 text-sm text-right text-muted-foreground">
                             {item.taxRate ? `${item.taxRate}%` : '-'}
                           </td>
-                          <td className="p-4 text-right text-muted-foreground">
+                          <td className="p-2 text-sm text-right text-muted-foreground">
                             {formatCurrency(item.taxAmount || 0)}
                           </td>
                         </>
                       )}
-                      <td className="p-4 text-right">
+                      <td className="p-2 text-sm text-right">
                         <span className={itemPaid > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
                           {formatCurrency(itemPaid)}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-2 text-sm text-right">
                         <span className={itemBalance > 0 ? 'text-red-600 font-medium' : itemBalance < 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
                           {formatCurrency(itemBalance)}
                         </span>
@@ -895,15 +937,15 @@ export default function InvoiceDetailsPage() {
 
         {/* Summary Section */}
         <div className="flex justify-end">
-          <div className="w-full md:w-80 space-y-2">
-            <div className="flex justify-between text-sm text-muted-foreground">
+          <div className="w-full md:w-72 space-y-1.5">
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>Subtotal:</span>
               <span className="font-medium text-foreground">
                 {formatCurrency(totals?.subtotal || 0)}
               </span>
             </div>
             {totals && totals.taxAmount > 0 && (
-              <div className="flex justify-between text-sm text-muted-foreground">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
                   {totals.taxCalculationMethod === 'product' 
                     ? 'Tax (Product-Level):' 
@@ -915,20 +957,20 @@ export default function InvoiceDetailsPage() {
               </div>
             )}
             {totals && totals.discount > 0 && (
-              <div className="flex justify-between text-sm text-muted-foreground">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Discount:</span>
                 <span className="font-medium text-red-600">
                   -{formatCurrency(totals.discount || 0)}
                 </span>
               </div>
             )}
-            <div className="flex justify-between text-lg font-bold pt-4 border-t-2 border-border mt-2">
+            <div className="flex justify-between text-base font-bold pt-3 border-t border-border mt-1">
               <span>Total Amount:</span>
               <span className="text-primary">
                 {formatCurrency(totals?.totalAmount || invoice.totalAmount || 0)}
               </span>
             </div>
-            <div className="flex justify-between text-sm text-muted-foreground pt-2">
+            <div className="flex justify-between text-xs text-muted-foreground pt-1">
               <span>Paid Amount:</span>
               <span className="font-medium text-green-600">
                 {formatCurrency(totals.paidAmount || invoice.paidAmount || 0)}

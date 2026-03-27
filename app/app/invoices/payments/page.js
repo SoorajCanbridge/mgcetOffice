@@ -5,53 +5,21 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
-  CreditCard,
-  Search,
-  User,
-  FileText,
-  DollarSign,
-  CheckCircle,
-  XCircle,
-  Calendar,
-  Building2,
-  Phone,
-  Mail,
-  MapPin,
-  ArrowLeft,
-  RefreshCcw,
-  Filter,
-  X,
-  Plus,
-  Minus,
-  Receipt,
-  Printer,
-  Download,
-  AlertCircle,
-  TrendingUp,
-  TrendingDown,
+  CreditCard, Search, User, FileText, DollarSign, CheckCircle,
+  XCircle, Calendar, Building2, Phone, Mail, MapPin, ArrowLeft,
+  RefreshCcw, Filter, X, Plus, Minus, Receipt, Printer, Download,
+  AlertCircle, TrendingUp, TrendingDown, ChevronRight, Banknote,
+  Smartphone, Landmark, Hash, Clock, Check, Zap,
 } from 'lucide-react';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -62,107 +30,55 @@ const INVOICE_BASE = '/finance/invoices';
 const PAYMENTS_BASE = '/finance/payments';
 
 const PAYMENT_METHODS = [
-  { value: 'cash', label: 'Cash', icon: '💵' },
-  { value: 'bank-transfer', label: 'Bank Transfer', icon: '🏦' },
-  { value: 'cheque', label: 'Cheque', icon: '📝' },
-  { value: 'card', label: 'Card', icon: '💳' },
-  { value: 'upi', label: 'UPI', icon: '📱' },
-  { value: 'neft', label: 'NEFT', icon: '💸' },
-  { value: 'rtgs', label: 'RTGS', icon: '💸' },
-  { value: 'online', label: 'Online Payment', icon: '🌐' },
-  { value: 'other', label: 'Other', icon: '📄' },
+  { value: 'cash',          label: 'Cash',         icon: Banknote,   color: '#16a34a' },
+  { value: 'upi',           label: 'UPI',           icon: Smartphone, color: '#7c3aed' },
+  { value: 'card',          label: 'Card',          icon: CreditCard, color: '#2563eb' },
+  { value: 'bank-transfer', label: 'Bank Transfer', icon: Landmark,   color: '#0891b2' },
+  { value: 'cheque',        label: 'Cheque',        icon: FileText,   color: '#b45309' },
+  { value: 'neft',          label: 'NEFT',          icon: Hash,       color: '#0369a1' },
+  { value: 'rtgs',          label: 'RTGS',          icon: Zap,        color: '#dc2626' },
+  { value: 'online',        label: 'Online',        icon: DollarSign, color: '#059669' },
+  { value: 'other',         label: 'Other',         icon: Receipt,    color: '#6b7280' },
 ];
 
+/* ─── helpers ─── */
 const formatDateForInput = (date) => {
   if (!date) return '';
-  try {
-    return new Date(date).toISOString().split('T')[0];
-  } catch {
-    return '';
-  }
+  try { return new Date(date).toISOString().split('T')[0]; } catch { return ''; }
 };
-
 const formatDateForDisplay = (date) => {
-  if (!date) return '-';
+  if (!date) return '—';
   try {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  } catch {
-    return '-';
-  }
+    return new Date(date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch { return '—'; }
 };
-
 const formatCurrency = (value) => {
   if (!value && value !== 0) return '₹0.00';
   try {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return String(value);
-  }
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value);
+  } catch { return String(value); }
 };
-
-/** Evenly distribute `totalAmount` across split rows so the sum matches (2+ decimal places). */
 const redistributeAccountSplits = (rows, totalAmount) => {
   const list = rows?.length ? [...rows] : [];
   const n = list.length;
   const total = Math.max(0, Math.round(Number(totalAmount) * 100) / 100);
   if (n === 0) return list;
-  if (n === 1) {
-    return [{ ...list[0], amount: String(total) }];
-  }
+  if (n === 1) return [{ ...list[0], amount: String(total) }];
   const share = Math.floor((total / n) * 100) / 100;
   let assigned = 0;
   return list.map((r, i) => {
-    if (i < n - 1) {
-      assigned += share;
-      return { ...r, amount: String(share) };
-    }
-    const last = Math.round((total - assigned) * 100) / 100;
-    return { ...r, amount: String(last) };
+    if (i < n - 1) { assigned += share; return { ...r, amount: String(share) }; }
+    return { ...r, amount: String(Math.round((total - assigned) * 100) / 100) };
   });
 };
-
-const DEFAULT_LEVEL_LABELS = {
-  A: 'Department',
-  B: 'Year',
-  C: 'Section',
-};
-
-const normalizeLevelLabels = (labels) => {
-  if (!labels || typeof labels !== 'object') return DEFAULT_LEVEL_LABELS;
-  return {
-    A: labels.A || DEFAULT_LEVEL_LABELS.A,
-    B: labels.B || DEFAULT_LEVEL_LABELS.B,
-    C: labels.C || DEFAULT_LEVEL_LABELS.C,
-  };
-};
-
-const normalizeLevelValues = (values) => {
-  if (!values || typeof values !== 'object') return { A: [], B: [], C: [] };
-  return {
-    A: Array.isArray(values.A) ? values.A : [],
-    B: Array.isArray(values.B) ? values.B : [],
-    C: Array.isArray(values.C) ? values.C : [],
-  };
-};
-
+const DEFAULT_LEVEL_LABELS = { A: 'Department', B: 'Year', C: 'Section' };
+const normalizeLevelLabels = (l) => !l || typeof l !== 'object' ? DEFAULT_LEVEL_LABELS : { A: l.A || DEFAULT_LEVEL_LABELS.A, B: l.B || DEFAULT_LEVEL_LABELS.B, C: l.C || DEFAULT_LEVEL_LABELS.C };
+const normalizeLevelValues = (v) => !v || typeof v !== 'object' ? { A: [], B: [], C: [] } : { A: Array.isArray(v.A) ? v.A : [], B: Array.isArray(v.B) ? v.B : [], C: Array.isArray(v.C) ? v.C : [] };
 const formatAddressForDisplay = (address) => {
   if (!address) return '';
   if (typeof address === 'string') return address;
   if (typeof address !== 'object') return '';
-  const parts = [];
-  if (address.street) parts.push(address.street);
-  if (address.city) parts.push(address.city);
-  if (address.state) parts.push(address.state);
-  if (address.pincode) parts.push(address.pincode);
-  return parts.join(', ');
+  return [address.street, address.city, address.state, address.pincode].filter(Boolean).join(', ');
 };
 
 export default function InvoicePaymentsPage() {
@@ -170,82 +86,72 @@ export default function InvoicePaymentsPage() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
 
-  // Student selection state
   const [studentSearch, setStudentSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [students, setStudents] = useState([]);
   const [studentLoading, setStudentLoading] = useState(false);
-  const [studentFilters, setStudentFilters] = useState({
-    courseId: '',
-    levelA: '',
-    levelB: '',
-    levelC: '',
-  });
+  const [studentFilters, setStudentFilters] = useState({ courseId: '', levelA: '', levelB: '', levelC: '' });
   const [levelLabels, setLevelLabels] = useState(DEFAULT_LEVEL_LABELS);
   const [levelValues, setLevelValues] = useState({ A: [], B: [], C: [] });
   const [courses, setCourses] = useState([]);
   const [showStudentPicker, setShowStudentPicker] = useState(false);
 
-  // Invoice state
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoices, setSelectedInvoices] = useState([]);
-  const [selectedInvoice, setSelectedInvoice] = useState(null); // Single selected invoice for details view
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalTab, setPaymentModalTab] = useState('payment');
 
-  // Payment form state
   const [paymentForm, setPaymentForm] = useState({
     paymentDate: formatDateForInput(new Date()),
     paymentMethod: 'cash',
     account: '',
     accountSplitEnabled: false,
-    accountSplits: [], // [{ account, amount }] when splitting across ledger accounts
+    accountSplits: [],
     reference: '',
     transactionId: '',
     chequeNumber: '',
     chequeDate: '',
     bankName: '',
     description: '',
-    itemPayments: [], // For item-level payments
-    paymentMode: 'full', // 'full' or 'items'
+    itemPayments: [],
+    paymentMode: 'full',
+    amount: '',
   });
 
-  // Accounts and other data
   const [accounts, setAccounts] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [applyingDiscounts, setApplyingDiscounts] = useState(false);
+  const [discountEditorItemIndex, setDiscountEditorItemIndex] = useState(null);
+  const [discountEditorValue, setDiscountEditorValue] = useState('');
+  const [showPostSubmitPopover, setShowPostSubmitPopover] = useState(false);
+  const [createdPaymentId, setCreatedPaymentId] = useState('');
 
   const normalizeCollegeId = (college) => {
     if (!college) return '';
-    if (typeof college === 'object') {
-      return college._id || college.id || '';
-    }
+    if (typeof college === 'object') return college._id || college.id || '';
     return String(college);
   };
 
-  // Fetch courses
   const fetchCourses = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const collegeId = normalizeCollegeId(user.college);
-      const response = await api.get(`/academic/courses?collegeId=${collegeId}`, {}, true);
-      const data = response?.data || response || [];
+      const cId = normalizeCollegeId(user.college);
+      const res = await api.get(`/academic/courses?collegeId=${cId}`, {}, true);
+      const data = res?.data || res || [];
       setCourses(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to load courses:', err);
-    }
+    } catch {}
   }, [user?.college]);
 
-  // Fetch level labels
   const fetchLevelLabels = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const collegeId = normalizeCollegeId(user.college);
-      const response = await api.get(`/academic/config/${collegeId}`);
-      const config = response?.data || response || {};
+      const cId = normalizeCollegeId(user.college);
+      const res = await api.get(`/academic/config/${cId}`);
+      const config = res?.data || res || {};
       setLevelLabels(normalizeLevelLabels(config.levelNames));
       setLevelValues(normalizeLevelValues(config.levelValues));
     } catch {
@@ -254,298 +160,178 @@ export default function InvoicePaymentsPage() {
     }
   }, [user?.college]);
 
-  // Fetch accounts
   const fetchAccounts = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const response = await api.get('/finance/accounts', {}, true);
-      const data = response?.data || response || [];
+      const res = await api.get('/finance/accounts', {}, true);
+      const data = res?.data || res || [];
       setAccounts(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to load accounts:', err);
-    }
+    } catch {}
   }, [user?.college]);
 
-  // Search students
   const searchStudents = useCallback(async () => {
     if (!user?.college) return;
     try {
       setStudentLoading(true);
       const params = new URLSearchParams();
-      params.set('limit', '50');
-      params.set('page', '1');
+      params.set('limit', '50'); params.set('page', '1');
       if (studentSearch?.trim()) params.set('search', studentSearch.trim());
       if (studentFilters.courseId) params.set('courseId', studentFilters.courseId);
       if (studentFilters.levelA) params.set('levelA', studentFilters.levelA);
       if (studentFilters.levelB) params.set('levelB', studentFilters.levelB);
       if (studentFilters.levelC) params.set('levelC', studentFilters.levelC);
-
-      const response = await api.get(`/students?${params.toString()}`, {}, true);
-      const data = response?.data ?? response ?? [];
+      const res = await api.get(`/students?${params.toString()}`, {}, true);
+      const data = res?.data ?? res ?? [];
       setStudents(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to search students:', err);
-      setStudents([]);
-    } finally {
-      setStudentLoading(false);
-    }
+    } catch { setStudents([]); } finally { setStudentLoading(false); }
   }, [user?.college, studentSearch, studentFilters]);
 
-  // Fetch invoices for selected student
   const fetchStudentInvoices = useCallback(async () => {
-    if (!selectedStudent?._id || !user?.college) {
-      setInvoices([]);
-      return;
-    }
+    if (!selectedStudent?._id || !user?.college) { setInvoices([]); return []; }
     try {
       setInvoiceLoading(true);
-      const response = await api.get(
-        `${INVOICE_BASE}?studentId=${selectedStudent._id}`,
-        {},
-        true
-      );
-      const data = response?.data || response || [];
-      setInvoices(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Failed to load invoices:', err);
+      const res = await api.get(`${INVOICE_BASE}?studentId=${selectedStudent._id}`, {}, true);
+      const data = res?.data || res || [];
+      const next = Array.isArray(data) ? data : [];
+      setInvoices(next);
+      return next;
+    } catch {
       setInvoices([]);
-    } finally {
-      setInvoiceLoading(false);
-    }
+      return [];
+    } finally { setInvoiceLoading(false); }
   }, [selectedStudent, user?.college]);
 
-  // Handle navigation from invoice page
   useEffect(() => {
     const invoiceId = searchParams.get('invoiceId');
     if (invoiceId && user?.college) {
-      // Fetch invoice and set up student
-      api.get(`${INVOICE_BASE}/${invoiceId}`, {}, true)
-        .then((response) => {
-          const invoice = response?.data || response;
-          if (invoice) {
-            // Set selected invoice and invoices
-            setSelectedInvoice(invoice);
-            setSelectedInvoices([invoice]);
-            
-            // Set student if available
-            if (invoice.student) {
-              const studentId = typeof invoice.student === 'object' ? invoice.student._id : invoice.student;
-              if (studentId) {
-                api.get(`/students/${studentId}`, {}, true)
-                  .then((studentResponse) => {
-                    const studentData = studentResponse?.data || studentResponse;
-                    if (studentData) {
-                      setSelectedStudent(studentData);
-                    }
-                  })
-                  .catch(() => {
-                    if (typeof invoice.student === 'object') {
-                      setSelectedStudent(invoice.student);
-                    }
-                  });
-              } else if (typeof invoice.student === 'object') {
-                setSelectedStudent(invoice.student);
-              }
-            }
+      api.get(`${INVOICE_BASE}/${invoiceId}`, {}, true).then((res) => {
+        const invoice = res?.data || res;
+        if (invoice) {
+          setSelectedInvoice(invoice);
+          setSelectedInvoices([invoice]);
+          if (invoice.student) {
+            const sid = typeof invoice.student === 'object' ? invoice.student._id : invoice.student;
+            if (sid) {
+              api.get(`/students/${sid}`, {}, true)
+                .then((sr) => { const s = sr?.data || sr; if (s) setSelectedStudent(s); })
+                .catch(() => { if (typeof invoice.student === 'object') setSelectedStudent(invoice.student); });
+            } else if (typeof invoice.student === 'object') setSelectedStudent(invoice.student);
           }
-        })
-        .catch((err) => {
-          console.error('Failed to load invoice:', err);
-        });
+        }
+      }).catch(() => {});
     }
   }, [searchParams, user?.college]);
 
   useEffect(() => {
     if (!user?.college) return;
-    fetchCourses();
-    fetchLevelLabels();
-    fetchAccounts();
+    fetchCourses(); fetchLevelLabels(); fetchAccounts();
   }, [user?.college, fetchCourses, fetchLevelLabels, fetchAccounts]);
 
   useEffect(() => {
-    if (showStudentPicker) {
-      const timer = setTimeout(() => {
-        searchStudents();
-      }, studentSearch ? 400 : 0);
-      return () => clearTimeout(timer);
-    }
+    if (!showStudentPicker) return;
+    const t = setTimeout(searchStudents, studentSearch ? 400 : 0);
+    return () => clearTimeout(t);
   }, [showStudentPicker, studentSearch, studentFilters, searchStudents]);
 
+  useEffect(() => { if (selectedStudent?._id) fetchStudentInvoices(); }, [selectedStudent, fetchStudentInvoices]);
+
   useEffect(() => {
-    if (selectedStudent?._id) {
-      fetchStudentInvoices();
+    if (!selectedInvoice?._id || !Array.isArray(invoices) || invoices.length === 0) return;
+    const refreshedActive = invoices.find((inv) => inv._id === selectedInvoice._id);
+    if (refreshedActive && refreshedActive !== selectedInvoice) {
+      setSelectedInvoice(refreshedActive);
     }
-  }, [selectedStudent, fetchStudentInvoices]);
+    setSelectedInvoices((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      const next = prev
+        .map((oldInv) => invoices.find((inv) => inv._id === oldInv._id))
+        .filter(Boolean);
+      return next.length > 0 ? next : prev;
+    });
+  }, [invoices, selectedInvoice]);
 
   const handleSelectStudent = (student) => {
-    setSelectedStudent(student);
-    setShowStudentPicker(false);
-    setSelectedInvoices([]);
-    setStudentSearch('');
+    setSelectedStudent(student); setShowStudentPicker(false);
+    setSelectedInvoices([]); setStudentSearch('');
   };
 
   const handleToggleInvoice = (invoice) => {
     setSelectedInvoices((prev) => {
       const exists = prev.find((inv) => inv._id === invoice._id);
       if (exists) {
-        const newList = prev.filter((inv) => inv._id !== invoice._id);
-        // If this was the selected invoice, clear it
-        if (selectedInvoice?._id === invoice._id) {
-          setSelectedInvoice(newList.length > 0 ? newList[0] : null);
-        }
-        return newList;
-      } else {
-        const newList = [...prev, invoice];
-        // Set as selected invoice if none selected
-        if (!selectedInvoice) {
-          setSelectedInvoice(invoice);
-        }
-        return newList;
+        const next = prev.filter((inv) => inv._id !== invoice._id);
+        if (selectedInvoice?._id === invoice._id) setSelectedInvoice(next.length > 0 ? next[0] : null);
+        return next;
       }
+      const next = [...prev, invoice];
+      if (!selectedInvoice) setSelectedInvoice(invoice);
+      return next;
     });
   };
 
   const handleSelectInvoiceForDetails = (invoice) => {
     setSelectedInvoice(invoice);
-    // Add to selected invoices if not already there
     if (!selectedInvoices.find((inv) => inv._id === invoice._id)) {
       setSelectedInvoices((prev) => [...prev, invoice]);
     }
   };
 
-  const handleSelectAllInvoices = () => {
-    const payableInvoices = invoices.filter((inv) => {
-      const balance = calculateInvoiceBalance(inv);
-      return balance > 0;
-    });
-    setSelectedInvoices(payableInvoices);
-  };
-
-  const handleDeselectAllInvoices = () => {
-    setSelectedInvoices([]);
-  };
-
   const calculateInvoiceBalance = (invoice) => {
-    const subtotal = invoice.subtotal || (invoice.items || []).reduce(
-      (sum, item) => sum + (Number(item.amount) || 0),
-      0
-    );
-    
+    const subtotal = invoice.subtotal || (invoice.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
     let taxAmount = 0;
-    const taxCalculationMethod = invoice.taxCalculationMethod || 'total';
-    
-    if (taxCalculationMethod === 'product') {
-      taxAmount = (invoice.items || []).reduce(
-        (sum, item) => sum + (Number(item.taxAmount) || 0),
-        0
-      );
+    if ((invoice.taxCalculationMethod || 'total') === 'product') {
+      taxAmount = (invoice.items || []).reduce((s, i) => s + (Number(i.taxAmount) || 0), 0);
     } else {
-      const taxRate = invoice.taxRate || 0;
-      taxAmount = (subtotal * taxRate) / 100;
+      taxAmount = (subtotal * (invoice.taxRate || 0)) / 100;
     }
-    
-    const discount = invoice.discount || 0;
-    const totalAmount = subtotal + taxAmount - discount;
-    const paidAmount = invoice.paidAmount || 0;
-    return Math.max(0, totalAmount - paidAmount);
+    return Math.max(0, subtotal + taxAmount - (invoice.discount || 0) - (invoice.paidAmount || 0));
   };
 
-  const calculateTotals = useMemo(() => {
-    const totals = selectedInvoices.reduce(
-      (acc, invoice) => {
-        const balance = calculateInvoiceBalance(invoice);
-        return {
-          totalAmount: acc.totalAmount + balance,
-          invoiceCount: acc.invoiceCount + 1,
-        };
-      },
-      { totalAmount: 0, invoiceCount: 0 }
-    );
-    return totals;
-  }, [selectedInvoices]);
-
-  const handlePaymentFormChange = (field, value) => {
-    setPaymentForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  // Calculate invoice totals helper
   const calculateInvoiceTotals = useCallback((inv) => {
     if (!inv) return { subtotal: 0, taxAmount: 0, totalAmount: 0, balanceAmount: 0 };
-    
-    const subtotal = inv.subtotal || (inv.items || []).reduce(
-      (sum, item) => sum + (Number(item.amount) || 0),
-      0
-    );
-    
-    let taxAmount = 0;
+    const subtotal = inv.subtotal || (inv.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
     const taxCalculationMethod = inv.taxCalculationMethod || 'total';
-    
+    let taxAmount = 0;
     if (taxCalculationMethod === 'product') {
-      taxAmount = (inv.items || []).reduce(
-        (sum, item) => sum + (Number(item.taxAmount) || 0),
-        0
-      );
+      taxAmount = (inv.items || []).reduce((s, i) => s + (Number(i.taxAmount) || 0), 0);
     } else {
-      const taxRate = inv.taxRate || 0;
-      taxAmount = (subtotal * taxRate) / 100;
+      taxAmount = (subtotal * (inv.taxRate || 0)) / 100;
     }
-    
-    const discount = inv.discount || 0;
-    const totalAmount = subtotal + taxAmount - discount;
-    const paidAmount = inv.paidAmount || 0;
-    const balanceAmount = totalAmount - paidAmount;
-    
-    return { subtotal, taxAmount, totalAmount, balanceAmount, taxCalculationMethod };
+    const totalAmount = subtotal + taxAmount - (inv.discount || 0);
+    return { subtotal, taxAmount, totalAmount, balanceAmount: totalAmount - (inv.paidAmount || 0), taxCalculationMethod };
   }, []);
 
-  // Item total with tax
   const getItemTotalWithTax = useCallback((inv, item, subtotal, taxAmount) => {
     if (!inv || !item) return 0;
     const amount = Number(item.amount) || 0;
-    const method = inv.taxCalculationMethod || 'total';
-    if (method === 'product') {
-      const itemTax = Number(item.taxAmount) || 0;
-      return amount + itemTax;
-    }
-    const invSubtotal = subtotal || (inv.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
-    if (!invSubtotal || invSubtotal <= 0) return amount;
-    const itemShareOfTax = (amount / invSubtotal) * (taxAmount || 0);
-    return amount + itemShareOfTax;
+    const discount = Number(item.discount) || 0;
+    const netAmount = Math.max(0, amount - discount);
+    if ((inv.taxCalculationMethod || 'total') === 'product') return netAmount + (Number(item.taxAmount) || 0);
+    const invSub = subtotal || (inv.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    if (!invSub || invSub <= 0) return netAmount;
+    return netAmount + (amount / invSub) * (taxAmount || 0);
   }, []);
 
-  // Item balance for payment
   const getItemBalanceForPayment = useCallback((inv, item, itemIndex, subtotal, taxAmount) => {
     if (!inv || !item) return 0;
-    const totalWithTax = getItemTotalWithTax(inv, item, subtotal, taxAmount);
-    const paid = Number(item.paidAmount) || 0;
-    return Math.max(0, totalWithTax - paid);
+    return Math.max(0, getItemTotalWithTax(inv, item, subtotal, taxAmount) - (Number(item.paidAmount) || 0));
   }, [getItemTotalWithTax]);
 
   const openPaymentModal = useCallback(async (invoice) => {
     if (!invoice) return;
-    
-    // Fetch full invoice details if needed
     let fullInvoice = invoice;
     if (!invoice.items || invoice.items.length === 0) {
       try {
-        const response = await api.get(`${INVOICE_BASE}/${invoice._id}`, {}, true);
-        fullInvoice = response?.data || response;
-      } catch (err) {
-        console.error('Failed to load invoice details:', err);
-      }
+        const res = await api.get(`${INVOICE_BASE}/${invoice._id}`, {}, true);
+        fullInvoice = res?.data || res;
+      } catch {}
     }
-    
-    const calculatedTotals = calculateInvoiceTotals(fullInvoice);
-    const balance = calculatedTotals.balanceAmount;
-    
+    const totals = calculateInvoiceTotals(fullInvoice);
     setSelectedInvoice(fullInvoice);
     setPaymentForm({
-      amount: balance > 0 ? String(balance) : '',
+      amount: totals.balanceAmount > 0 ? String(totals.balanceAmount) : '',
       paymentDate: formatDateForInput(new Date()),
-      paymentMethod: 'bank-transfer',
+      paymentMethod: 'cash',
       reference: '',
       account: fullInvoice.account?._id || fullInvoice.account || '',
       accountSplitEnabled: false,
@@ -557,157 +343,157 @@ export default function InvoicePaymentsPage() {
       chequeDate: '',
       bankName: '',
       description: '',
+      itemDiscounts: (fullInvoice.items || []).map((item, index) => ({
+        itemIndex: index,
+        discount: Number(item.discount) || 0,
+      })),
     });
     setPaymentModalTab('payment');
     setShowPaymentModal(true);
+    setDiscountEditorItemIndex(null);
+    setDiscountEditorValue('');
     setError('');
   }, [calculateInvoiceTotals]);
 
   const closePaymentModal = useCallback(() => {
     setShowPaymentModal(false);
     setPaymentModalTab('payment');
+    setDiscountEditorItemIndex(null);
+    setDiscountEditorValue('');
     setError('');
   }, []);
 
+  const extractCreatedPaymentId = (response) => {
+    if (!response) return '';
+    return (
+      response?.data?._id ||
+      response?._id ||
+      response?.data?.payment?._id ||
+      response?.payment?._id ||
+      response?.data?.paymentId ||
+      response?.paymentId ||
+      ''
+    );
+  };
+
+  const handleApplySingleItemDiscount = useCallback(async (itemIndex, rawDiscount) => {
+    if (!selectedInvoice?._id) return;
+    const item = selectedInvoice.items?.[itemIndex];
+    if (!item) return;
+    const discountValue = Math.max(0, Number(rawDiscount) || 0);
+    const itemAmount = Number(item.amount) || 0;
+    if (discountValue > itemAmount) {
+      setError(`Discount cannot exceed item amount (${formatCurrency(itemAmount)}).`);
+      return;
+    }
+
+    const invoiceDiscount = Number(selectedInvoice.discount) || 0;
+    const otherItemsDiscountTotal = (selectedInvoice.items || []).reduce((sum, it, idx) => {
+      if (idx === itemIndex) return sum;
+      return sum + (Number(it.discount) || 0);
+    }, 0);
+    if (otherItemsDiscountTotal + discountValue > invoiceDiscount) {
+      setError(`Total item discounts cannot exceed invoice discount (${formatCurrency(invoiceDiscount)}).`);
+      return;
+    }
+
+    setApplyingDiscounts(true);
+    setError('');
+    try {
+      let response;
+      try {
+        response = await api.put(
+          `${INVOICE_BASE}/${selectedInvoice._id}/item-discounts`,
+          { itemDiscounts: [{ itemIndex, discount: discountValue }], discount: invoiceDiscount },
+          {},
+          true
+        );
+      } catch {
+        response = await api.put(
+          `${INVOICE_BASE}/${selectedInvoice._id}/apply-item-discounts`,
+          { itemDiscounts: [{ itemIndex, discount: discountValue }], discount: invoiceDiscount },
+          {},
+          true
+        );
+      }
+
+      const updated = response?.data || response;
+      if (updated?._id) {
+        setSelectedInvoice(updated);
+        setInvoices((prev) => prev.map((inv) => (inv._id === updated._id ? updated : inv)));
+      }
+      setPaymentForm((prev) => ({ ...prev, itemPayments: [], amount: '' }));
+      setDiscountEditorItemIndex(null);
+      setDiscountEditorValue('');
+      setSuccess('Discount applied.');
+      setTimeout(() => setSuccess(''), 2500);
+    } catch (err) {
+      setError(err.message || 'Failed to apply item discount.');
+    } finally {
+      setApplyingDiscounts(false);
+    }
+  }, [selectedInvoice]);
+
   const handleProcessPayment = async (e) => {
     e?.preventDefault();
-    if (!selectedInvoice?._id) {
-      setError('No invoice selected for payment.');
-      setPaymentModalTab('payment');
+    if (paymentModalTab !== 'summary') {
       return;
     }
+    if (!selectedInvoice?._id) { setError('No invoice selected.'); return; }
+    if (!paymentForm.paymentDate) { setError('Please select a payment date.'); return; }
 
-    if (!paymentForm.paymentDate) {
-      setError('Please select a payment date.');
-      setPaymentModalTab('payment');
-      return;
+    const totals = calculateInvoiceTotals(selectedInvoice);
+    const invoiceBalance = totals.balanceAmount;
+    const payAmt = paymentForm.paymentMode === 'full'
+      ? Number(paymentForm.amount) || 0
+      : paymentForm.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+
+    if (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.filter(ip => ip.amount > 0).length === 0) {
+      setError('Please select at least one item to pay.'); return;
     }
-
-    const calculatedTotals = calculateInvoiceTotals(selectedInvoice);
-    const invoiceBalance = calculatedTotals.balanceAmount;
-
-    const payAmountForAccount =
-      paymentForm.paymentMode === 'full'
-        ? Number(paymentForm.amount) || 0
-        : paymentForm.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
-
-    // Payment tab: amount / items (before account)
-    if (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length > 0) {
-      const itemPayments = paymentForm.itemPayments
-        .filter((ip) => ip.amount > 0)
-        .map((ip) => ({
-          itemIndex: ip.itemIndex,
-          amount: Number(ip.amount),
-        }));
-      if (itemPayments.length === 0) {
-        setError('Please specify payment amounts for at least one item.');
-        setPaymentModalTab('payment');
-        return;
-      }
-    } else {
-      const amount = Number(paymentForm.amount);
-      if (!amount || amount <= 0) {
-        setError('Please enter a valid payment amount.');
-        setPaymentModalTab('payment');
-        return;
-      }
-      if (amount > invoiceBalance) {
-        setError('Payment amount exceeds outstanding balance.');
-        setPaymentModalTab('payment');
-        return;
-      }
+    if (paymentForm.paymentMode === 'full') {
+      if (!payAmt || payAmt <= 0) { setError('Please enter a valid payment amount.'); return; }
+      if (payAmt > invoiceBalance) { setError('Amount exceeds outstanding balance.'); return; }
     }
-
-    // Account tab: single account or splits
-    if (!paymentForm.accountSplitEnabled) {
-      if (!paymentForm.account) {
-        // setError('Please select a payment account on the Account tab.');
-        setPaymentModalTab('account');
-        return;
+    if (!paymentForm.accountSplitEnabled && !paymentForm.account) {
+      setPaymentModalTab('account'); return;
+    }
+    if (paymentForm.accountSplitEnabled) {
+      const rows = (paymentForm.accountSplits || []).filter(r => Number(r.amount) > 0);
+      if (rows.length < 2 || new Set(rows.map(r => String(r.account))).size < 2) {
+        setError('Add at least 2 different accounts.'); setPaymentModalTab('account'); return;
       }
-    } else {
-      const rows = (paymentForm.accountSplits || [])
-        .map((r) => ({
-          account: r.account,
-          amount: Number(r.amount) || 0,
-        }))
-        .filter((r) => r.amount > 0);
-      if (rows.length < 2) {
-        setError('Add at least two account splits with amounts (Account tab).');
-        setPaymentModalTab('account');
-        return;
-      }
-      const uniq = new Set(rows.map((r) => String(r.account)));
-      if (uniq.size < 2) {
-        setError('Use at least two different accounts when splitting (Account tab).');
-        setPaymentModalTab('account');
-        return;
-      }
-      if (rows.some((r) => !r.account)) {
-        setError('Select an account for each split (Account tab).');
-        setPaymentModalTab('account');
-        return;
-      }
-      const splitSum = rows.reduce((s, r) => s + r.amount, 0);
-      if (Math.abs(splitSum - payAmountForAccount) > 0.01) {
-        setError(
-          `Account splits must sum to ${formatCurrency(payAmountForAccount)} (currently ${formatCurrency(splitSum)}). Use "Match payment total" on the Account tab.`
-        );
-        setPaymentModalTab('account');
-        return;
+      const splitSum = rows.reduce((s, r) => s + Number(r.amount), 0);
+      if (Math.abs(splitSum - payAmt) > 0.01) {
+        setError(`Splits must sum to ${formatCurrency(payAmt)}`); setPaymentModalTab('account'); return;
       }
     }
 
     setError('');
     setProcessingPayment(true);
-
     try {
+      let createdId = '';
       const accountSplitsPayload = paymentForm.accountSplitEnabled
-        ? (paymentForm.accountSplits || [])
-            .map((r) => ({
-              account: r.account,
-              amount: Number(r.amount) || 0,
-            }))
-            .filter((r) => r.amount > 0 && r.account)
+        ? (paymentForm.accountSplits || []).filter(r => Number(r.amount) > 0 && r.account).map(r => ({ account: r.account, amount: Number(r.amount) }))
         : [];
-      const primaryAccount =
-        paymentForm.accountSplitEnabled && accountSplitsPayload.length >= 2
-          ? accountSplitsPayload[0].account
-          : paymentForm.account || selectedInvoice.account?._id || selectedInvoice.account;
+      const primaryAccount = paymentForm.accountSplitEnabled && accountSplitsPayload.length >= 2
+        ? accountSplitsPayload[0].account
+        : paymentForm.account || selectedInvoice.account?._id || selectedInvoice.account;
 
-      // If payment mode is 'items', use payInvoiceItems endpoint
-      if (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length > 0) {
-        const itemPayments = paymentForm.itemPayments
-          .filter(ip => ip.amount > 0)
-          .map(ip => ({
-            itemIndex: ip.itemIndex,
-            amount: Number(ip.amount),
-          }));
-
-        await api.post(
-          `${INVOICE_BASE}/${selectedInvoice._id}/pay-items`,
-          {
-            itemPayments,
-            account: primaryAccount,
-            ...(accountSplitsPayload.length >= 2 ? { accountSplits: accountSplitsPayload } : {}),
-            paymentDate: paymentForm.paymentDate,
-            paymentMethod: paymentForm.paymentMethod || 'cash',
-            notes: paymentForm.description || undefined,
-          },
-          {},
-          true
-        );
-        setSuccess('Item-level payment recorded successfully.');
+      if (paymentForm.paymentMode === 'items') {
+        const itemPayments = paymentForm.itemPayments.filter(ip => ip.amount > 0).map(ip => ({ itemIndex: ip.itemIndex, amount: Number(ip.amount) }));
+        const payItemsResponse = await api.post(`${INVOICE_BASE}/${selectedInvoice._id}/pay-items`, {
+          itemPayments, account: primaryAccount,
+          ...(accountSplitsPayload.length >= 2 ? { accountSplits: accountSplitsPayload } : {}),
+          paymentDate: paymentForm.paymentDate, paymentMethod: paymentForm.paymentMethod || 'cash',
+          notes: paymentForm.description || undefined,
+        }, {}, true);
+        createdId = extractCreatedPaymentId(payItemsResponse);
       } else {
-        const amount = Number(paymentForm.amount);
-
-        const paymentPayload = {
-          invoice: selectedInvoice._id,
-          amount,
-          paymentDate: paymentForm.paymentDate,
-          paymentMethod: paymentForm.paymentMethod,
-          account: primaryAccount,
-          status: 'completed',
+        const payload = {
+          invoice: selectedInvoice._id, amount: Number(paymentForm.amount),
+          paymentDate: paymentForm.paymentDate, paymentMethod: paymentForm.paymentMethod,
+          account: primaryAccount, status: 'completed',
           referenceNumber: paymentForm.reference || undefined,
           transactionId: paymentForm.transactionId || undefined,
           chequeNumber: paymentForm.chequeNumber || undefined,
@@ -716,1485 +502,1121 @@ export default function InvoicePaymentsPage() {
           description: paymentForm.description || undefined,
           student: selectedInvoice.student?._id || selectedInvoice.student || selectedStudent?._id || undefined,
         };
-
-        if (accountSplitsPayload.length >= 2) {
-          paymentPayload.accountSplits = accountSplitsPayload;
-        }
-
-        // If item payments are specified, include them
-        if (paymentForm.itemPayments && paymentForm.itemPayments.length > 0) {
-          const itemPayments = paymentForm.itemPayments
-            .filter(ip => ip.amount > 0)
-            .map(ip => ({
-              itemIndex: ip.itemIndex,
-              amount: Number(ip.amount),
-            }));
-          if (itemPayments.length > 0) {
-            paymentPayload.itemPayments = itemPayments;
-          }
-        }
-
-        await api.post(PAYMENTS_BASE, paymentPayload, {}, true);
-        setSuccess('Payment recorded successfully.');
+        if (accountSplitsPayload.length >= 2) payload.accountSplits = accountSplitsPayload;
+        const paymentResponse = await api.post(PAYMENTS_BASE, payload, {}, true);
+        createdId = extractCreatedPaymentId(paymentResponse);
       }
-      
-      closePaymentModal();
-      
-      // Reset form
-      setPaymentForm({
-        paymentDate: formatDateForInput(new Date()),
-        paymentMethod: 'bank-transfer',
-        account: '',
-        accountSplitEnabled: false,
-        accountSplits: [],
-        reference: '',
-        transactionId: '',
-        chequeNumber: '',
-        chequeDate: '',
-        bankName: '',
-        description: '',
-        itemPayments: [],
-        paymentMode: 'full',
-        amount: '',
-      });
-      setPaymentModalTab('payment');
-
-      // Refresh invoices
+      setSuccess('Payment recorded successfully.');
+      const paidInvoiceId = selectedInvoice?._id;
       if (selectedStudent?._id) {
-        await fetchStudentInvoices();
+        const refreshedInvoices = await fetchStudentInvoices();
+        if (refreshedInvoices.length > 0) {
+          setSelectedInvoices((prevSelected) => {
+            const selectedIds = new Set((prevSelected || []).map((inv) => inv._id));
+            const refreshedSelected = refreshedInvoices.filter((inv) => selectedIds.has(inv._id));
+            if (refreshedSelected.length > 0) return refreshedSelected;
+            const paidInvoice = refreshedInvoices.find((inv) => inv._id === paidInvoiceId);
+            return paidInvoice ? [paidInvoice] : [];
+          });
+          setSelectedInvoice((prevInvoice) => {
+            const preferredId = prevInvoice?._id || paidInvoiceId;
+            const preferred = refreshedInvoices.find((inv) => inv._id === preferredId);
+            return preferred || refreshedInvoices[0] || null;
+          });
+        }
       }
+      closePaymentModal();
+      setCreatedPaymentId(createdId || '');
+      setShowPostSubmitPopover(true);
+      setPaymentForm({ paymentDate: formatDateForInput(new Date()), paymentMethod: 'cash', account: '', accountSplitEnabled: false, accountSplits: [], reference: '', transactionId: '', chequeNumber: '', chequeDate: '', bankName: '', description: '', itemPayments: [], itemDiscounts: [], paymentMode: 'full', amount: '' });
     } catch (err) {
       setError(err.message || 'Failed to process payment');
     } finally {
       setProcessingPayment(false);
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
     }
   };
 
   const studentLevelOptions = useMemo(() => {
-    const levelA = levelValues.A || [];
-    const levelB = (levelValues.B || [])
-      .filter((item) => item.parent === studentFilters.levelA)
-      .flatMap((item) => item.values || []);
-    const levelC = (levelValues.C || [])
-      .filter((item) => item.parent === studentFilters.levelB || item.parent === studentFilters.levelA)
-      .flatMap((item) => item.values || []);
-
-    return {
-      levelA: [...new Set(levelA)].sort(),
-      levelB: [...new Set(levelB)].sort(),
-      levelC: [...new Set(levelC)].sort(),
-    };
+    const lA = levelValues.A || [];
+    const lB = (levelValues.B || []).filter(i => i.parent === studentFilters.levelA).flatMap(i => i.values || []);
+    const lC = (levelValues.C || []).filter(i => i.parent === studentFilters.levelB || i.parent === studentFilters.levelA).flatMap(i => i.values || []);
+    return { levelA: [...new Set(lA)].sort(), levelB: [...new Set(lB)].sort(), levelC: [...new Set(lC)].sort() };
   }, [levelValues, studentFilters.levelA, studentFilters.levelB]);
 
-  const isOverdue = (invoice) => {
-    if (!invoice?.dueDate || invoice.status === 'paid' || invoice.status === 'cancelled') return false;
-    try {
-      return new Date(invoice.dueDate) < new Date(new Date().toDateString());
-    } catch {
-      return false;
-    }
+  const isOverdue = (inv) => {
+    if (!inv?.dueDate || inv.status === 'paid' || inv.status === 'cancelled') return false;
+    try { return new Date(inv.dueDate) < new Date(new Date().toDateString()); } catch { return false; }
   };
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => router.push('/app/invoices')}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <CreditCard className="h-8 w-8 text-primary" />
-                Record Invoice Payment
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Process payments for student invoices
-              </p>
+  const pendingCount = invoices.filter(inv => calculateInvoiceBalance(inv) > 0).length;
+  const totalOutstanding = invoices.reduce((s, inv) => s + calculateInvoiceBalance(inv), 0);
+
+  /* ─── Payment modal internals ─── */
+  const renderPaymentModal = () => {
+    if (!selectedInvoice) return null;
+    const totals = calculateInvoiceTotals(selectedInvoice);
+    const invoiceBalance = totals.balanceAmount;
+    const paymentAmount = paymentForm.paymentMode === 'full'
+      ? (Number(paymentForm.amount) || 0)
+      : paymentForm.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+    const remainingBalance = invoiceBalance - paymentAmount;
+    const accountSplitsSum = (paymentForm.accountSplits || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const invoiceDiscountCap = Number(selectedInvoice.discount) || 0;
+    const totalAppliedItemDiscount = (selectedInvoice.items || []).reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    const remainingDiscountCapacity = Math.max(0, invoiceDiscountCap - totalAppliedItemDiscount);
+    const isPaymentStepComplete = paymentForm.paymentMode === 'full'
+      ? paymentAmount > 0 && paymentAmount <= invoiceBalance
+      : paymentForm.itemPayments.some((ip) => Number(ip.amount) > 0);
+    const isDateStepComplete = Boolean(paymentForm.paymentDate && paymentForm.paymentMethod);
+    const isAccountStepComplete = paymentForm.accountSplitEnabled
+      ? Math.abs(accountSplitsSum - paymentAmount) <= 0.01 &&
+        (paymentForm.accountSplits || []).filter((r) => Number(r.amount) > 0 && r.account).length >= 2
+      : Boolean(paymentForm.account);
+    const selectedMethodObj = PAYMENT_METHODS.find(m => m.value === paymentForm.paymentMethod);
+    const MethodIcon = selectedMethodObj?.icon || CreditCard;
+
+    return (
+      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open) closePaymentModal(); }}>
+        <DialogContent className="max-w-6xl h-[94vh] max-h-[94vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl border-0 shadow-2xl">
+          {/* POS Header */}
+          <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' }} className="px-7 pt-6 pb-5 flex-shrink-0">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-1">Fee Collection</p>
+                <h2 className="text-white text-xl font-bold">{selectedInvoice.invoiceNumber || 'Invoice'}</h2>
+              </div>
+              <div className="text-right">
+                <p className="text-slate-400 text-xs mb-1">Outstanding</p>
+                <p className="text-white text-2xl font-black tabular-nums">{formatCurrency(invoiceBalance)}</p>
+              </div>
+            </div>
+
+            {/* Student strip */}
+            {(selectedStudent || selectedInvoice.student) && (
+              <div className="flex items-center gap-3 bg-white/10 rounded-xl px-4 py-2.5">
+                <div className="h-8 w-8 rounded-full bg-blue-500/30 flex items-center justify-center flex-shrink-0">
+                  <User className="h-4 w-4 text-blue-300" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white text-sm font-semibold truncate">
+                    {selectedStudent?.name || (typeof selectedInvoice.student === 'object' ? selectedInvoice.student.name : '') || 'Student'}
+                  </p>
+                  <p className="text-slate-400 text-xs truncate">
+                    {selectedStudent?.rollNumber || selectedStudent?.studentId || ''}
+                    {selectedStudent?.email ? ` · ${selectedStudent.email}` : ''}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Progress bar */}
+            <div className="mt-4">
+              <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                <span>Paid {formatCurrency(selectedInvoice.paidAmount || 0)} of {formatCurrency(totals.totalAmount)}</span>
+                <span>{totals.totalAmount > 0 ? Math.round(((selectedInvoice.paidAmount || 0) / totals.totalAmount) * 100) : 0}% paid</span>
+              </div>
+              <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-400 to-emerald-400 rounded-full transition-all"
+                  style={{ width: `${totals.totalAmount > 0 ? Math.min(100, ((selectedInvoice.paidAmount || 0) / totals.totalAmount) * 100) : 0}%` }}
+                />
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedStudent(null);
-                setSelectedInvoices([]);
-                setStudentSearch('');
-              }}
-            >
-              <RefreshCcw className="h-4 w-4 mr-2" />
-              Reset
+
+          <form onSubmit={(e) => e.preventDefault()} className="flex flex-col flex-1 min-h-0 bg-background">
+            <div className="flex-1 overflow-y-auto">
+              {error && (
+                <div className="mx-5 mt-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2.5">
+                  <AlertCircle className="h-4 w-4 shrink-0" />{error}
+                </div>
+              )}
+
+              <Tabs
+                value={paymentModalTab}
+                onValueChange={setPaymentModalTab}
+                className="w-full"
+              >
+                <TabsList className="grid grid-cols-4 w-auto gap-2 mx-5 mb-5 h-11">
+                  <TabsTrigger value="payment">Payment</TabsTrigger>
+                  <TabsTrigger value="date" disabled={!isPaymentStepComplete}>Date & Method</TabsTrigger>
+                  <TabsTrigger value="account" disabled={!isPaymentStepComplete || !isDateStepComplete}>Account</TabsTrigger>
+                  <TabsTrigger value="summary" disabled={!isPaymentStepComplete || !isDateStepComplete || !isAccountStepComplete}>Summary</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="payment" className="px-5 pb-5 space-y-6 min-h-[56vh]">
+                  {/* Payment Mode Toggle */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { value: 'full', label: 'Full Invoice', sub: `Pay ${formatCurrency(invoiceBalance)}` },
+                      { value: 'items', label: 'Select Items', sub: 'Pay specific fees' },
+                    ].map(opt => (
+                      <button key={opt.value} type="button"
+                        onClick={() => {
+                          if (opt.value === 'full') {
+                            setPaymentForm(prev => ({ ...prev, paymentMode: 'full', amount: String(invoiceBalance > 0 ? invoiceBalance : ''), itemPayments: [] }));
+                          } else {
+                            setPaymentForm(prev => ({ ...prev, paymentMode: 'items', amount: '' }));
+                          }
+                        }}
+                        className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                          paymentForm.paymentMode === opt.value
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/40'
+                            : 'border-border hover:border-blue-300 bg-card'
+                        }`}
+                      >
+                        {paymentForm.paymentMode === opt.value && (
+                          <div className="absolute top-2.5 right-2.5 h-4 w-4 rounded-full bg-blue-500 flex items-center justify-center">
+                            <Check className="h-2.5 w-2.5 text-white" />
+                          </div>
+                        )}
+                        <p className={`font-semibold text-sm ${paymentForm.paymentMode === opt.value ? 'text-blue-700 dark:text-blue-300' : 'text-foreground'}`}>
+                          {opt.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{opt.sub}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Full Payment Amount */}
+                  {paymentForm.paymentMode === 'full' && (
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Payment Amount</label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">₹</span>
+                        <Input
+                          type="number" min="0" step="0.01" max={invoiceBalance} required
+                          value={paymentForm.amount}
+                          onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                          className="pl-8 h-12 text-lg font-bold tabular-nums rounded-xl border-2 focus:border-blue-500"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      {paymentForm.amount && Number(paymentForm.amount) > invoiceBalance && (
+                        <p className="text-xs text-destructive mt-1.5 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Exceeds outstanding balance</p>
+                      )}
+                      {/* Quick amount buttons */}
+                      <div className="flex gap-2.5 mt-3">
+                        {[
+                          { label: 'Full', fn: () => invoiceBalance },
+                          { label: '75%', fn: () => Math.round(invoiceBalance * 0.75 * 100) / 100 },
+                          { label: '50%', fn: () => Math.round(invoiceBalance * 0.50 * 100) / 100 },
+                          { label: '25%', fn: () => Math.round(invoiceBalance * 0.25 * 100) / 100 },
+                        ].map(btn => (
+                          <button key={btn.label} type="button"
+                            onClick={() => setPaymentForm(prev => ({ ...prev, amount: String(btn.fn()) }))}
+                            className="flex-1 py-2 text-xs font-semibold rounded-lg border border-border hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-all"
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Item-Level Payment */}
+                  {paymentForm.paymentMode === 'items' && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Select Fee Items</label>
+                        <div className="flex items-center gap-3">
+                          <button type="button"
+                            onClick={() => {
+                              const items = (selectedInvoice.items || []).map((item, i) => {
+                                const bal = getItemBalanceForPayment(selectedInvoice, item, i, totals.subtotal, totals.taxAmount);
+                                return bal > 0 ? { itemIndex: i, amount: bal } : null;
+                              }).filter(Boolean);
+                              setPaymentForm(prev => ({ ...prev, itemPayments: items, amount: String(items.reduce((s, ip) => s + ip.amount, 0)) }));
+                            }}
+                            className="text-xs text-blue-600 font-semibold hover:text-blue-700"
+                          >
+                            Select All
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Discount used: {formatCurrency(totalAppliedItemDiscount)} / {formatCurrency(invoiceDiscountCap)}
+                        </p>
+                        {invoiceDiscountCap > 0 && (
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${remainingDiscountCapacity > 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                            Remaining: {formatCurrency(remainingDiscountCapacity)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                        {(selectedInvoice.items || []).map((item, index) => {
+                          const bal = getItemBalanceForPayment(selectedInvoice, item, index, totals.subtotal, totals.taxAmount);
+                          if (bal <= 0) return null;
+                          const amount = Number(item.amount) || 0;
+                          const itemTax = (amount - (Number(item.discount) || 0)) * ((Number(item.taxRate) || 0) / 100);
+                          const itemNet = getItemTotalWithTax(item);
+                          const itemPaid = Number(item.paidAmount) || 0;
+                          const itemDiscount = Number(item.discount) || 0;
+                          const maxAdditionalDiscount = Math.max(0, Math.min(
+                            remainingDiscountCapacity,
+                            Math.max(0, amount - itemDiscount)
+                          ));
+                          const canShowDiscountAction = invoiceDiscountCap > 0 && maxAdditionalDiscount > 0;
+                          const ip = paymentForm.itemPayments.find(x => x.itemIndex === index) || { itemIndex: index, amount: 0 };
+                          const isChecked = ip.amount > 0;
+                          return (
+                            <div key={index} className={`p-3 rounded-xl border transition-all ${isChecked ? 'border-blue-400 bg-blue-50/80 dark:bg-blue-950/20' : 'border-border'}`}>
+                              <div className="flex items-center gap-3 flex-wrap lg:flex-nowrap">
+                                <input type="checkbox" checked={isChecked} className="w-4 h-4 accent-blue-500"
+                                  onChange={(e) => {
+                                    const updated = paymentForm.itemPayments.filter(x => x.itemIndex !== index);
+                                    if (e.target.checked) updated.push({ itemIndex: index, amount: bal });
+                                    setPaymentForm(prev => ({ ...prev, itemPayments: updated, amount: String(updated.reduce((s, x) => s + x.amount, 0)) }));
+                                  }}
+                                />
+                                <div className="min-w-[200px] flex-1">
+                                  <p className="text-sm font-semibold truncate">{item.description || `Item ${index + 1}`}</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Gross {formatCurrency(amount)} | Tax {formatCurrency(itemTax)} | Net {formatCurrency(itemNet)}
+                                  </p>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground min-w-[210px]">
+                                  <span className="font-medium text-foreground">{formatCurrency(itemPaid)}</span> paid /
+                                  <span className="font-semibold text-blue-700 dark:text-blue-300"> {formatCurrency(bal)}</span> balance
+                                </div>
+
+                                <div className="min-w-[120px] text-right">
+                                  <p className="text-[11px] text-muted-foreground">Discount</p>
+                                  <p className="text-sm font-semibold text-emerald-600">{formatCurrency(itemDiscount)}</p>
+                                </div>
+                                {canShowDiscountAction && (
+                                  <div className="min-w-[220px]">
+                                    {discountEditorItemIndex === index ? (
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          step="0.01"
+                                          max={maxAdditionalDiscount}
+                                          value={discountEditorValue}
+                                          placeholder="More discount"
+                                          onChange={(e) => setDiscountEditorValue(e.target.value)}
+                                          className="h-9 w-32 text-sm text-right tabular-nums"
+                                        />
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          className="h-9 px-3 text-xs"
+                                          disabled={applyingDiscounts}
+                                          onClick={() => {
+                                            const additional = Math.max(0, Number(discountEditorValue) || 0);
+                                            if (additional > maxAdditionalDiscount) {
+                                              setError(`Additional discount cannot exceed ${formatCurrency(maxAdditionalDiscount)}.`);
+                                              return;
+                                            }
+                                            handleApplySingleItemDiscount(index, itemDiscount + additional);
+                                          }}
+                                        >
+                                          {applyingDiscounts ? 'Applying…' : (itemDiscount > 0 ? 'Apply More' : 'Apply')}
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="text-xs text-emerald-600 font-semibold hover:text-emerald-700"
+                                        onClick={() => {
+                                          setDiscountEditorItemIndex(index);
+                                          setDiscountEditorValue(String(maxAdditionalDiscount));
+                                        }}
+                                      >
+                                        {itemDiscount > 0 ? 'More Discount' : 'Apply Discount'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
+                                {isChecked && (
+                                  <Input type="number" min="0" step="0.01" max={bal}
+                                    value={ip.amount || ''} placeholder="0.00"
+                                    className="w-32 h-9 text-sm text-right tabular-nums"
+                                    onChange={(e) => {
+                                      const amt = Math.min(Number(e.target.value) || 0, bal);
+                                      const updated = paymentForm.itemPayments.filter(x => x.itemIndex !== index);
+                                      if (amt > 0) updated.push({ itemIndex: index, amount: amt });
+                                      setPaymentForm(prev => ({ ...prev, itemPayments: updated, amount: String(updated.reduce((s, x) => s + x.amount, 0)) }));
+                                    }}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {paymentForm.itemPayments.length > 0 && (
+                        <div className="mt-2 flex justify-between text-sm font-semibold px-1">
+                          <span className="text-muted-foreground">Selected total:</span>
+                          <span className="text-blue-600">{formatCurrency(paymentAmount)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="date" className="px-5 pb-5 space-y-6 min-h-[56vh]">
+                  {/* Payment Method — visual grid */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5">Payment Method</label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {PAYMENT_METHODS.map((m) => {
+                        const Icon = m.icon;
+                        const active = paymentForm.paymentMethod === m.value;
+                        return (
+                          <button key={m.value} type="button"
+                            onClick={() => setPaymentForm(prev => ({ ...prev, paymentMethod: m.value }))}
+                            className={`relative flex flex-col items-center gap-1.5 py-3.5 px-2 rounded-xl border-2 transition-all ${
+                              active ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 shadow-sm' : 'border-border hover:border-blue-200 bg-card'
+                            }`}
+                          >
+                            {active && (
+                              <div className="absolute top-1.5 right-1.5 h-3.5 w-3.5 rounded-full bg-blue-500 flex items-center justify-center">
+                                <Check className="h-2 w-2 text-white" />
+                              </div>
+                            )}
+                            <Icon className="h-5 w-5" style={{ color: active ? m.color : undefined }} />
+                            <span className={`text-xs font-medium leading-tight text-center ${active ? 'text-blue-700 dark:text-blue-300' : 'text-muted-foreground'}`}>
+                              {m.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Method-specific fields */}
+                  {paymentForm.paymentMethod === 'cheque' && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Cheque Number</label>
+                        <Input value={paymentForm.chequeNumber} onChange={(e) => setPaymentForm(p => ({ ...p, chequeNumber: e.target.value }))} placeholder="Enter cheque number" className="rounded-xl" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Cheque Date</label>
+                        <Input type="date" value={paymentForm.chequeDate} onChange={(e) => setPaymentForm(p => ({ ...p, chequeDate: e.target.value }))} className="rounded-xl" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Bank Name</label>
+                        <Input value={paymentForm.bankName} onChange={(e) => setPaymentForm(p => ({ ...p, bankName: e.target.value }))} placeholder="Enter bank name" className="rounded-xl" />
+                      </div>
+                    </div>
+                  )}
+                  {['bank-transfer', 'upi', 'neft', 'rtgs'].includes(paymentForm.paymentMethod) && (
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Transaction ID / Reference</label>
+                      <Input value={paymentForm.transactionId} onChange={(e) => setPaymentForm(p => ({ ...p, transactionId: e.target.value }))} placeholder="Enter transaction ID" className="rounded-xl" />
+                    </div>
+                  )}
+
+                  {/* Payment Date */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Payment Date *</label>
+                      <Input
+                        type="date"
+                        required
+                        value={paymentForm.paymentDate}
+                        onChange={(e) => setPaymentForm(p => ({ ...p, paymentDate: e.target.value }))}
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="account" className="px-5 pb-5 space-y-6 min-h-[56vh]">
+                  {/* Account */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ledger Account *</label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <Checkbox checked={paymentForm.accountSplitEnabled}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              const payAmt = paymentForm.paymentMode === 'full'
+                                ? Number(paymentForm.amount) || 0
+                                : paymentForm.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
+                              const half = Math.round((payAmt / 2) * 100) / 100;
+                              setPaymentForm(prev => ({
+                                ...prev,
+                                accountSplitEnabled: true,
+                                accountSplits: [
+                                  { account: prev.account, amount: String(half) },
+                                  { account: '', amount: String(Math.round((payAmt - half) * 100) / 100) },
+                                ],
+                              }));
+                            } else {
+                              setPaymentForm(prev => ({ ...prev, accountSplitEnabled: false, accountSplits: [], account: prev.accountSplits?.[0]?.account || prev.account }));
+                            }
+                          }}
+                        />
+                        <span className="text-xs text-muted-foreground">Split accounts</span>
+                      </label>
+                    </div>
+                    {!paymentForm.accountSplitEnabled ? (
+                      <Select
+                        value={paymentForm.account || undefined}
+                        onValueChange={(v) => setPaymentForm(p => ({ ...p, account: v }))}
+                      >
+                        <SelectTrigger className="rounded-xl h-10">
+                          <SelectValue placeholder="Select ledger account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accounts.map(acc => (
+                            <SelectItem key={acc._id} value={acc._id}>
+                              {acc.name} {acc.accountType ? `(${acc.accountType})` : ''} — {formatCurrency(acc.balance || 0)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="space-y-2">
+                        {(paymentForm.accountSplits || []).map((row, idx) => (
+                          <div key={idx} className="flex gap-2.5 items-center">
+                            <Select
+                              value={row.account || undefined}
+                              onValueChange={(v) => setPaymentForm(prev => {
+                                const n = [...(prev.accountSplits || [])];
+                                n[idx] = { ...n[idx], account: v };
+                                return { ...prev, accountSplits: n };
+                              })}
+                            >
+                              <SelectTrigger className="flex-1 rounded-xl h-10 text-sm">
+                                <SelectValue placeholder="Account" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {accounts.map(acc => (
+                                  <SelectItem key={acc._id} value={acc._id}>
+                                    {acc.name} — {formatCurrency(acc.balance || 0)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={row.amount}
+                              onChange={(e) => setPaymentForm(prev => {
+                                const n = [...(prev.accountSplits || [])];
+                                n[idx] = { ...n[idx], amount: e.target.value };
+                                return { ...prev, accountSplits: n };
+                              })}
+                              placeholder="0.00"
+                              className="w-32 rounded-xl h-10 text-sm text-right"
+                            />
+                            {(paymentForm.accountSplits || []).length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setPaymentForm(prev => {
+                                  const l = [...(prev.accountSplits || [])];
+                                  l.splice(idx, 1);
+                                  return { ...prev, accountSplits: redistributeAccountSplits(l, paymentAmount) };
+                                })}
+                                className="text-muted-foreground hover:text-destructive p-1"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentForm(prev => ({ ...prev, accountSplits: redistributeAccountSplits([...(prev.accountSplits || []), { account: '', amount: '' }], paymentAmount) }))}
+                            className="text-xs text-blue-600 font-semibold flex items-center gap-1"
+                          >
+                            <Plus className="h-3 w-3" /> Add account
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentForm(prev => ({ ...prev, accountSplits: redistributeAccountSplits(prev.accountSplits, paymentAmount) }))}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Auto-split equally
+                          </button>
+                        </div>
+                        {Math.abs(accountSplitsSum - paymentAmount) > 0.01 && (
+                          <p className="text-xs text-amber-600">Splits ({formatCurrency(accountSplitsSum)}) must equal payment ({formatCurrency(paymentAmount)})</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="summary" className="px-5 pb-5 space-y-6 min-h-[56vh]">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Payment Summary</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center border border-border/50 bg-muted/20 rounded-xl px-4 py-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Paying</p>
+                        <p className="text-base font-black text-blue-600 tabular-nums">{formatCurrency(paymentAmount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Remaining</p>
+                        <p className={`text-base font-black tabular-nums ${remainingBalance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {formatCurrency(Math.max(0, remainingBalance))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        <p className={`text-sm font-bold ${remainingBalance <= 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {remainingBalance <= 0 ? '✓ Cleared' : 'Partial'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Reference Id (optional)</label>
+                      <Input
+                        value={paymentForm.reference}
+                        onChange={(e) => setPaymentForm(p => ({ ...p, reference: e.target.value }))}
+                        placeholder="Optional reference"
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Notes (optional)</label>
+                    <textarea
+                      value={paymentForm.description}
+                      onChange={(e) => setPaymentForm(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Add a payment note..."
+                      rows={2}
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+
+            {/* POS Footer */}
+            <div className="flex-shrink-0 border-t border-border bg-muted/30">
+              <div className="px-5 py-4 flex gap-3">
+                <Button type="button" variant="outline" onClick={closePaymentModal} className="flex-1 rounded-xl h-11">
+                  Cancel
+                </Button>
+                {paymentModalTab !== 'payment' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (paymentModalTab === 'date') setPaymentModalTab('payment');
+                      else if (paymentModalTab === 'account') setPaymentModalTab('date');
+                      else if (paymentModalTab === 'summary') setPaymentModalTab('account');
+                    }}
+                    className="rounded-xl h-11"
+                  >
+                    Back
+                  </Button>
+                )}
+                {paymentModalTab !== 'summary' ? (
+                  <Button
+                    type="button"
+                    className="flex-[2] rounded-xl h-11 font-bold text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => {
+                      setError('');
+                      if (paymentModalTab === 'payment') {
+                        if (!isPaymentStepComplete) {
+                          setError(paymentForm.paymentMode === 'full'
+                            ? 'Enter a valid payment amount to continue.'
+                            : 'Select at least one fee item to continue.');
+                          return;
+                        }
+                        setPaymentModalTab('date');
+                        return;
+                      }
+                      if (paymentModalTab === 'date') {
+                        if (!isDateStepComplete) {
+                          setError('Select payment date and method to continue.');
+                          return;
+                        }
+                        setPaymentModalTab('account');
+                        return;
+                      }
+                      if (paymentModalTab === 'account') {
+                        if (!isAccountStepComplete) {
+                          setError(paymentForm.accountSplitEnabled
+                            ? 'Fix split accounts to continue.'
+                            : 'Choose an account to continue.');
+                          return;
+                        }
+                        setPaymentModalTab('summary');
+                      }
+                    }}
+                  >
+                    Next Step
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleProcessPayment}
+                    disabled={
+                      processingPayment || paymentAmount <= 0 ||
+                      (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length === 0) ||
+                      (paymentForm.accountSplitEnabled && Math.abs(accountSplitsSum - paymentAmount) > 0.01)
+                    }
+                    className="flex-[2] rounded-xl h-11 font-bold text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {processingPayment ? (
+                      <span className="flex items-center gap-2"><RefreshCcw className="h-4 w-4 animate-spin" /> Processing…</span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <MethodIcon className="h-4 w-4" />
+                        Collect {paymentAmount > 0 ? formatCurrency(paymentAmount) : ''}
+                      </span>
+                    )}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
+  /* ─── Main layout ─── */
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto p-5 space-y-5">
+
+        {/* Top Bar */}
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="icon" onClick={() => router.push('/app/invoices')} className="rounded-xl h-10 w-10 flex-shrink-0">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-blue-500" />
+              Fee Payment
+            </h1>
+            <p className="text-xs text-muted-foreground">Select student → choose invoice → collect payment</p>
+          </div>
+          <div className="ml-auto">
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => { setSelectedStudent(null); setSelectedInvoices([]); setStudentSearch(''); }}>
+              <RefreshCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
             </Button>
           </div>
         </div>
 
-        {/* Success/Error Messages */}
+        {/* Banners */}
         {success && (
-          <div className="bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 px-4 py-3 rounded-lg flex items-center gap-2">
-            <CheckCircle className="h-5 w-5" />
-            {success}
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-xl flex items-center gap-2.5 text-sm font-medium">
+            <CheckCircle className="h-4 w-4" />{success}
           </div>
         )}
         {error && !showPaymentModal && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg flex items-center gap-2">
-            <AlertCircle className="h-5 w-5" />
-            {error}
+          <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-xl flex items-center gap-2.5 text-sm">
+            <AlertCircle className="h-4 w-4" />{error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Student Selection & Invoices */}
-          <div className="lg:col-span-1 space-y-6">
-            {/* Student Selection Card */}
-            <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Select Student
-                </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* ── Left panel ── */}
+          <div className="lg:col-span-4 space-y-4">
+
+            {/* Step 1 — Student */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+              <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/30">
+                <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                  <span className="text-white text-xs font-bold">1</span>
+                </div>
+                <span className="text-sm font-semibold">Select Student</span>
               </div>
 
-              {!selectedStudent ? (
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search by name, roll number, email..."
-                        value={studentSearch}
-                        onChange={(e) => setStudentSearch(e.target.value)}
-                        onFocus={() => setShowStudentPicker(true)}
-                        className="pl-10"
-                      />
+              <div className="p-4">
+                {!selectedStudent ? (
+                  <button type="button" onClick={() => setShowStudentPicker(true)} className="w-full flex items-center gap-3 p-3.5 border-2 border-dashed border-border rounded-xl hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 transition-all group">
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 transition-colors">
+                      <Search className="h-5 w-5 text-muted-foreground group-hover:text-blue-500" />
                     </div>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowStudentPicker(true)}
-                    >
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filters
-                    </Button>
-                  </div>
-
-                  {/* Student Picker Dialog */}
-                  <Dialog open={showStudentPicker} onOpenChange={setShowStudentPicker}>
-                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Select Student</DialogTitle>
-                        <DialogDescription>
-                          Search and filter students to find invoices
-                        </DialogDescription>
-                      </DialogHeader>
-
-                      <div className="space-y-4">
-                        {/* Search */}
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Search students..."
-                            value={studentSearch}
-                            onChange={(e) => setStudentSearch(e.target.value)}
-                            className="pl-10"
-                          />
-                        </div>
-
-                        {/* Filters */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                          <Select
-                            value={studentFilters.courseId || undefined}
-                            onValueChange={(value) =>
-                              setStudentFilters((prev) => ({ ...prev, courseId: value === 'all' ? '' : value }))
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Course" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Courses</SelectItem>
-                              {courses.map((course) => (
-                                <SelectItem key={course._id} value={course._id}>
-                                  {course.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          <Select
-                            value={studentFilters.levelA || undefined}
-                            onValueChange={(value) =>
-                              setStudentFilters((prev) => ({ ...prev, levelA: value === 'all' ? '' : value, levelB: '', levelC: '' }))
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={levelLabels.A} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All {levelLabels.A}</SelectItem>
-                              {studentLevelOptions.levelA.map((val) => (
-                                <SelectItem key={val} value={val}>
-                                  {val}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          <Select
-                            value={studentFilters.levelB || undefined}
-                            onValueChange={(value) =>
-                              setStudentFilters((prev) => ({ ...prev, levelB: value === 'all' ? '' : value, levelC: '' }))
-                            }
-                            disabled={!studentFilters.levelA}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={levelLabels.B} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All {levelLabels.B}</SelectItem>
-                              {studentLevelOptions.levelB.map((val) => (
-                                <SelectItem key={val} value={val}>
-                                  {val}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-
-                          <Select
-                            value={studentFilters.levelC || undefined}
-                            onValueChange={(value) =>
-                              setStudentFilters((prev) => ({ ...prev, levelC: value === 'all' ? '' : value }))
-                            }
-                            disabled={!studentFilters.levelB}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={levelLabels.C} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All {levelLabels.C}</SelectItem>
-                              {studentLevelOptions.levelC.map((val) => (
-                                <SelectItem key={val} value={val}>
-                                  {val}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Student List */}
-                        <div className="border rounded-lg max-h-96 overflow-y-auto">
-                          {studentLoading ? (
-                            <div className="p-8 text-center text-muted-foreground">
-                              Loading students...
-                            </div>
-                          ) : students.length === 0 ? (
-                            <div className="p-8 text-center text-muted-foreground">
-                              No students found
-                            </div>
-                          ) : (
-                            <div className="divide-y">
-                              {students.map((student) => (
-                                <div
-                                  key={student._id}
-                                  onClick={() => handleSelectStudent(student)}
-                                  className="p-4 hover:bg-muted cursor-pointer transition-colors"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <p className="font-semibold">{student.name}</p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {student.rollNumber || student.studentId || 'N/A'} • {student.email || 'No email'}
-                                      </p>
-                                    </div>
-                                    <Button variant="ghost" size="sm">
-                                      Select
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Selected Student Info */}
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                            <User className="h-6 w-6 text-primary" />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-lg">{selectedStudent.name}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedStudent.rollNumber || selectedStudent.studentId || 'N/A'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
-                          {selectedStudent.email && (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Mail className="h-4 w-4" />
-                              {selectedStudent.email}
-                            </div>
-                          )}
-                          {selectedStudent.phone && (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Phone className="h-4 w-4" />
-                              {selectedStudent.phone}
-                            </div>
-                          )}
-                          {selectedStudent.address && (
-                            <div className="flex items-start gap-2 text-muted-foreground col-span-2">
-                              <MapPin className="h-4 w-4 mt-0.5" />
-                              <span className="text-xs">
-                                {formatAddressForDisplay(selectedStudent.address)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedStudent(null);
-                          setSelectedInvoices([]);
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-muted-foreground group-hover:text-blue-600">Search & select student</p>
+                      <p className="text-xs text-muted-foreground">Name, roll number, or email</p>
                     </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto" />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                      <User className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{selectedStudent.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {selectedStudent.rollNumber || selectedStudent.studentId || ''}
+                        {selectedStudent.email ? ` · ${selectedStudent.email}` : ''}
+                      </p>
+                    </div>
+                    <button onClick={() => { setSelectedStudent(null); setSelectedInvoices([]); }} className="p-1.5 rounded-lg hover:bg-muted transition-colors flex-shrink-0">
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
-            {/* Invoices List */}
+            {/* Step 2 — Invoice list */}
             {selectedStudent && (
-              <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Available Invoices
-                  </h2>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSelectAllInvoices}
-                    >
-                      Select All
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDeselectAllInvoices}
-                    >
-                      Deselect All
-                    </Button>
+              <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-xs font-bold">2</span>
+                    </div>
+                    <span className="text-sm font-semibold">Invoices</span>
+                    {pendingCount > 0 && (
+                      <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 font-bold px-2 py-0.5 rounded-full">
+                        {pendingCount} pending
+                      </span>
+                    )}
                   </div>
+                  {totalOutstanding > 0 && (
+                    <span className="text-xs font-bold text-red-600">{formatCurrency(totalOutstanding)}</span>
+                  )}
                 </div>
 
-                {invoiceLoading ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    Loading invoices...
-                  </div>
-                ) : invoices.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    No pending invoices found for this student
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {invoices.map((invoice) => {
-                      const balance = calculateInvoiceBalance(invoice);
-                      const isSelected = selectedInvoices.some((inv) => inv._id === invoice._id);
-                      const overdue = isOverdue(invoice);
-
-                      return (
-                        <div
-                          key={invoice._id}
-                          className={`border rounded-lg p-4 transition-all cursor-pointer ${
-                            isSelected || selectedInvoice?._id === invoice._id
-                              ? 'border-primary bg-primary/5'
-                              : 'border-border hover:border-primary/50'
-                          } ${balance <= 0 ? 'opacity-50' : ''}`}
-                          onClick={() => handleSelectInvoiceForDetails(invoice)}
-                        >
-                          <div className="flex items-start gap-4">
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => {
-                                handleToggleInvoice(invoice);
-                              }}
-                              disabled={balance <= 0}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-semibold">
-                                      {invoice.invoiceNumber || 'N/A'}
-                                    </span>
-                                    {overdue && (
-                                      <span className="text-xs px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 rounded">
-                                        Overdue
-                                      </span>
-                                    )}
-                                    <span className={`text-xs px-2 py-0.5 rounded capitalize ${
-                                      invoice.status === 'paid'
-                                        ? 'bg-green-500/10 text-green-600'
-                                        : invoice.status === 'sent'
-                                        ? 'bg-blue-500/10 text-blue-600'
-                                        : 'bg-yellow-500/10 text-yellow-600'
-                                    }`}>
-                                      {invoice.status}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                    <span className="flex items-center gap-1">
-                                      <Calendar className="h-3 w-3" />
-                                      {formatDateForDisplay(invoice.invoiceDate)}
-                                    </span>
-                                    {invoice.dueDate && (
-                                      <span className="flex items-center gap-1">
-                                        Due: {formatDateForDisplay(invoice.dueDate)}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <div className="text-lg font-bold">
-                                    {formatCurrency(balance)}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    Balance
-                                  </div>
-                                </div>
-                              </div>
-                              {invoice.items && invoice.items.length > 0 && (
-                                <div className="text-xs text-muted-foreground mt-2">
-                                  {invoice.items.length} item(s)
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+                  {invoiceLoading ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">Loading…</div>
+                  ) : invoices.length === 0 ? (
+                    <div className="p-8 text-center text-sm text-muted-foreground">No invoices found</div>
+                  ) : invoices.map((invoice) => {
+                    const balance = calculateInvoiceBalance(invoice);
+                    const isActive = selectedInvoice?._id === invoice._id;
+                    const overdue = isOverdue(invoice);
+                    return (
+                      <div key={invoice._id}
+                        onClick={() => handleSelectInvoiceForDetails(invoice)}
+                        className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors ${isActive ? 'bg-blue-50 dark:bg-blue-950/30' : 'hover:bg-muted/50'} ${balance <= 0 ? 'opacity-50 pointer-events-none' : ''}`}
+                      >
+                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          invoice.status === 'paid' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                          overdue ? 'bg-red-100 dark:bg-red-900/30' : 'bg-amber-100 dark:bg-amber-900/30'
+                        }`}>
+                          <FileText className={`h-4 w-4 ${invoice.status === 'paid' ? 'text-emerald-600' : overdue ? 'text-red-600' : 'text-amber-600'}`} />
                         </div>
-                      );
-                    })}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-sm font-semibold truncate">{invoice.invoiceNumber || 'N/A'}</span>
+                            {overdue && <span className="text-[10px] bg-red-100 text-red-600 font-bold px-1.5 py-0.5 rounded flex-shrink-0">OVERDUE</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{formatDateForDisplay(invoice.invoiceDate)}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className={`text-sm font-bold tabular-nums ${balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {formatCurrency(balance)}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">balance</p>
+                        </div>
+                        {isActive && <div className="w-1 h-8 bg-blue-500 rounded-full flex-shrink-0 -mr-1" />}
+                      </div>
+                    );
+                  })}
+                </div>
+                {selectedInvoices.length > 0 && (
+                  <div className="px-4 py-3 border-t border-border bg-muted/20">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                      Selected Invoices ({selectedInvoices.length})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedInvoices.map((inv) => (
+                        <span
+                          key={inv._id}
+                          className="text-[11px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                        >
+                          {inv.invoiceNumber || inv._id}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Right Column - Invoice Details */}
-          <div className=" lg:col-span-2 space-y-6">
-            {selectedInvoice ? (
-              <div className="bg-card border border-border rounded-lg p-6 shadow-sm sticky top-6 space-y-6">
-                {/* Invoice Header */}
-                <div className="border-b-2 border-primary pb-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <h2 className="text-2xl font-bold text-primary mb-1">INVOICE</h2>
-                      <p className="text-muted-foreground text-sm">Invoice Statement</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-semibold mb-2">
-                        {selectedInvoice.invoiceNumber || 'N/A'}
-                      </p>
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                        selectedInvoice.status === 'paid'
-                          ? 'bg-green-500 text-white'
-                          : selectedInvoice.status === 'overdue'
-                          ? 'bg-red-500 text-white'
-                          : selectedInvoice.status === 'sent'
-                          ? 'bg-blue-500 text-white'
-                          : selectedInvoice.status === 'pending'
-                          ? 'bg-yellow-500 text-white'
-                          : 'bg-gray-500 text-white'
-                      }`}>
-                        {selectedInvoice.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Invoice Information */}
-                <div className="space-y-4">
-                  {/* Bill To */}
-                  {/* {selectedInvoice.billTo && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                        Bill To
-                      </h3>
-                      <div className="space-y-1">
-                        {selectedInvoice.billTo.name && (
-                          <p className="font-semibold">{selectedInvoice.billTo.name}</p>
-                        )}
-                        {selectedInvoice.billTo.address && (
-                          <p className="text-sm text-muted-foreground">{selectedInvoice.billTo.address}</p>
-                        )}
-                        {selectedInvoice.billTo.email && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Mail className="h-3 w-3" />
-                            {selectedInvoice.billTo.email}
-                          </div>
-                        )}
-                        {selectedInvoice.billTo.phone && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Phone className="h-3 w-3" />
-                            {selectedInvoice.billTo.phone}
-                          </div>
-                        )}
+          {/* ── Right panel — Invoice detail ── */}
+          <div className="lg:col-span-8">
+            {selectedInvoice ? (() => {
+              const totals = calculateInvoiceTotals(selectedInvoice);
+              const balance = totals.balanceAmount;
+              const overdue = isOverdue(selectedInvoice);
+              const selectedInvoiceRows = selectedInvoices.length > 0
+                ? selectedInvoices
+                : [selectedInvoice];
+              const selectionTotal = selectedInvoiceRows.reduce(
+                (sum, inv) => sum + (calculateInvoiceTotals(inv).totalAmount || 0),
+                0
+              );
+              const selectionPaid = selectedInvoiceRows.reduce(
+                (sum, inv) => sum + (Number(inv.paidAmount) || 0),
+                0
+              );
+              const selectionBalance = selectedInvoiceRows.reduce(
+                (sum, inv) => sum + calculateInvoiceBalance(inv),
+                0
+              );
+              const selectionOverdue = selectedInvoiceRows.filter((inv) => isOverdue(inv)).length;
+              return (
+                <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden sticky top-5">
+                  {/* Selected invoices summary */}
+                  <div className="px-6 py-4 border-b border-border bg-blue-50/60 dark:bg-blue-950/20">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">Current Selection</p>
+                        <p className="text-sm font-semibold text-foreground">
+                          {selectedInvoiceRows.length} invoice{selectedInvoiceRows.length > 1 ? 's' : ''} selected
+                          {selectionOverdue > 0 ? ` · ${selectionOverdue} overdue` : ''}
+                        </p>
                       </div>
-                    </div>
-                  )} */}
-
-                  {/* Invoice Details */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                      Invoice Details
-                    </h3>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Invoice Date:</span>
-                        <span className="font-medium">{formatDateForDisplay(selectedInvoice.invoiceDate)}</span>
-                      </div>
-                      {selectedInvoice.dueDate && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Due Date:</span>
-                          <span className="font-medium">{formatDateForDisplay(selectedInvoice.dueDate)}</span>
+                      <div className="grid grid-cols-3 gap-2 min-w-[360px]">
+                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-right">
+                          <p className="text-[10px] text-muted-foreground">Total</p>
+                          <p className="text-xs font-bold tabular-nums">{formatCurrency(selectionTotal)}</p>
                         </div>
-                      )}
+                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-right">
+                          <p className="text-[10px] text-muted-foreground">Paid</p>
+                          <p className="text-xs font-bold text-emerald-600 tabular-nums">{formatCurrency(selectionPaid)}</p>
+                        </div>
+                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-right">
+                          <p className="text-[10px] text-muted-foreground">Balance</p>
+                          <p className={`text-xs font-bold tabular-nums ${selectionBalance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                            {formatCurrency(selectionBalance)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {selectedInvoiceRows.map((inv) => (
+                        <span
+                          key={inv._id}
+                          className={`text-[11px] px-2 py-1 rounded-full border ${selectedInvoice?._id === inv._id ? 'bg-blue-100 border-blue-200 text-blue-700 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-300' : 'bg-background border-border text-muted-foreground'}`}
+                        >
+                          {inv.invoiceNumber || inv._id}
+                        </span>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Items Table */}
+                  {/* Invoice header bar */}
+                  <div className="px-6 py-5 border-b border-border">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h2 className="text-lg font-bold">{selectedInvoice.invoiceNumber || 'Invoice'}</h2>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold capitalize ${
+                            selectedInvoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' :
+                            overdue ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
+                            'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                          }`}>
+                            {overdue ? 'Overdue' : selectedInvoice.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDateForDisplay(selectedInvoice.invoiceDate)}</span>
+                          {selectedInvoice.dueDate && <span>Due: {formatDateForDisplay(selectedInvoice.dueDate)}</span>}
+                        </div>
+                      </div>
+                      {/* Balance callout */}
+                      <div className={`text-right px-4 py-2.5 rounded-xl ${balance > 0 ? 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800' : 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800'}`}>
+                        <p className="text-xs text-muted-foreground mb-0.5">Outstanding</p>
+                        <p className={`text-2xl font-black tabular-nums ${balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{formatCurrency(balance)}</p>
+                      </div>
+                    </div>
+
+                    {/* Summary row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: 'Invoice Total', value: formatCurrency(totals.totalAmount), muted: false },
+                        { label: 'Paid', value: formatCurrency(selectedInvoice.paidAmount || 0), green: true },
+                        { label: 'Balance Due', value: formatCurrency(balance), red: balance > 0 },
+                      ].map(item => (
+                        <div key={item.label} className="bg-muted/40 rounded-xl p-3">
+                          <p className="text-xs text-muted-foreground mb-1">{item.label}</p>
+                          <p className={`text-sm font-bold tabular-nums ${item.green ? 'text-emerald-600' : item.red ? 'text-red-600' : ''}`}>{item.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Items table */}
                   {selectedInvoice.items && selectedInvoice.items.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                        Items
-                      </h3>
-                      <div className="border rounded-lg overflow-hidden">
+                    <div className="px-6 py-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Fee Breakdown</p>
+                      <div className="border border-border rounded-xl overflow-hidden">
                         <Table>
                           <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-xs">Description</TableHead>
-                              <TableHead className="text-xs text-right">Qty</TableHead>
-                              <TableHead className="text-xs text-right">Price</TableHead>
-                              <TableHead className="text-xs text-right">Amount</TableHead>
-                              <TableHead className="text-xs text-right">Paid</TableHead>
-                              <TableHead className="text-xs text-right">Balance</TableHead>
+                            <TableRow className="bg-muted/40">
+                              <TableHead className="text-xs py-2.5">Description</TableHead>
+                              <TableHead className="text-xs py-2.5 text-right">Amount</TableHead>
+                              <TableHead className="text-xs py-2.5 text-right text-emerald-600">Paid</TableHead>
+                              <TableHead className="text-xs py-2.5 text-right text-red-600">Balance</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {selectedInvoice.items.map((item, index) => {
-                              const itemAmount = item.amount || 0;
-                              const itemPaid = item.paidAmount || 0;
-                              const itemBalance = itemAmount - itemPaid;
+                            {selectedInvoice.items.map((item, i) => {
+                              const amt = item.amount || 0;
+                              const paid = item.paidAmount || 0;
+                              const bal = amt - paid;
                               return (
-                                <TableRow key={index}>
-                                  <TableCell className="text-sm">{item.description || '-'}</TableCell>
-                                  <TableCell className="text-sm text-right">{item.quantity || 0}</TableCell>
-                                  <TableCell className="text-sm text-right">{formatCurrency(item.unitPrice || 0)}</TableCell>
-                                  <TableCell className="text-sm text-right font-medium">{formatCurrency(itemAmount)}</TableCell>
-                                  <TableCell className="text-sm text-right text-green-600">{formatCurrency(itemPaid)}</TableCell>
-                                  <TableCell className="text-sm text-right font-medium text-red-600">{formatCurrency(itemBalance)}</TableCell>
+                                <TableRow key={i} className="hover:bg-muted/20">
+                                  <TableCell className="text-sm py-2.5">
+                                    <div>
+                                      <p className="font-medium">{item.description || `Item ${i + 1}`}</p>
+                                      {item.quantity > 1 && <p className="text-xs text-muted-foreground">{item.quantity} × {formatCurrency(item.unitPrice || 0)}</p>}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-sm py-2.5 text-right font-medium tabular-nums">{formatCurrency(amt)}</TableCell>
+                                  <TableCell className="text-sm py-2.5 text-right text-emerald-600 font-medium tabular-nums">{formatCurrency(paid)}</TableCell>
+                                  <TableCell className={`text-sm py-2.5 text-right font-bold tabular-nums ${bal > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{formatCurrency(bal)}</TableCell>
                                 </TableRow>
                               );
                             })}
                           </TableBody>
                         </Table>
                       </div>
+
+                      {/* Tax / Discount breakdown */}
+                      {(totals.taxAmount > 0 || (selectedInvoice.discount || 0) > 0) && (
+                        <div className="mt-3 space-y-1.5 px-1">
+                          {totals.taxAmount > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Tax</span>
+                              <span className="font-medium tabular-nums">+ {formatCurrency(totals.taxAmount)}</span>
+                            </div>
+                          )}
+                          {(selectedInvoice.discount || 0) > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Discount</span>
+                              <span className="font-medium text-emerald-600 tabular-nums">− {formatCurrency(selectedInvoice.discount || 0)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Summary */}
-                  {(() => {
-                    const totals = calculateInvoiceTotals(selectedInvoice);
-                    return (
-                      <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Subtotal:</span>
-                          <span className="font-semibold">{formatCurrency(totals.subtotal)}</span>
-                        </div>
-                        {totals.taxAmount > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">
-                              {totals.taxCalculationMethod === 'product' ? 'Tax (Product-Level):' : `Tax (${selectedInvoice.taxRate || 0}%):`}
-                            </span>
-                            <span className="font-semibold">{formatCurrency(totals.taxAmount)}</span>
-                          </div>
-                        )}
-                        {selectedInvoice.discount > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Discount:</span>
-                            <span className="font-semibold text-red-600">-{formatCurrency(selectedInvoice.discount || 0)}</span>
-                          </div>
-                        )}
-                        <Separator />
-                        <div className="flex justify-between">
-                          <span className="font-medium">Total Amount:</span>
-                          <span className="font-bold">{formatCurrency(totals.totalAmount)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Paid Amount:</span>
-                          <span className="font-semibold text-green-600">{formatCurrency(selectedInvoice.paidAmount || 0)}</span>
-                        </div>
-                        <Separator />
-                        <div className="flex justify-between">
-                          <span className="font-medium">Outstanding Balance:</span>
-                          <span className={`font-bold ${totals.balanceAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(totals.balanceAmount)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Payment Button */}
-                  {(() => {
-                    const totals = calculateInvoiceTotals(selectedInvoice);
-                    const balance = totals.balanceAmount;
-                    return (
-                      <Button
-                        className="w-full"
-                        size="lg"
-                        onClick={() => openPaymentModal(selectedInvoice)}
-                        disabled={balance <= 0}
-                      >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Record Payment
-                      </Button>
-                    );
-                  })()}
+                  {/* CTA */}
+                  <div className="px-6 pb-5">
+                    <Button
+                      className="w-full h-12 rounded-xl font-bold text-base bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20"
+                      onClick={() => openPaymentModal(selectedInvoice)}
+                      disabled={balance <= 0}
+                    >
+                      <CreditCard className="h-5 w-5 mr-2" />
+                      {balance <= 0 ? 'Fully Paid' : `Collect Payment — ${formatCurrency(balance)}`}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="bg-card border border-border rounded-lg p-12 shadow-sm text-center">
-                <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                <p className="text-muted-foreground">Select an invoice to view details</p>
+              );
+            })() : (
+              <div className="flex flex-col items-center justify-center min-h-[360px] bg-card border border-border rounded-2xl text-center p-12">
+                <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                  <Receipt className="h-8 w-8 text-muted-foreground opacity-40" />
+                </div>
+                <p className="text-base font-semibold text-muted-foreground">No invoice selected</p>
+                <p className="text-sm text-muted-foreground/60 mt-1">
+                  {selectedStudent ? 'Pick an invoice from the list' : 'Search for a student to get started'}
+                </p>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Payment Modal */}
-      <Dialog open={showPaymentModal} onOpenChange={(open) => { if (!open) closePaymentModal(); }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Record Payment
-            </DialogTitle>
+      {/* Student Picker Dialog */}
+      <Dialog open={showPostSubmitPopover} onOpenChange={setShowPostSubmitPopover}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Payment Submitted</DialogTitle>
             <DialogDescription>
-              {selectedInvoice && (
-                <span>
-                  Invoice <strong>{selectedInvoice.invoiceNumber}</strong>
-                  {selectedInvoice.billTo?.name && ` · ${selectedInvoice.billTo.name}`}
-                </span>
-              )}
+              Payment has been recorded successfully.
             </DialogDescription>
           </DialogHeader>
-          {selectedInvoice && (() => {
-            const calculatedTotals = calculateInvoiceTotals(selectedInvoice);
-            const invoiceBalance = calculatedTotals.balanceAmount;
-            const invoiceTotalAmount = calculatedTotals.totalAmount;
-            const invoiceTaxAmount = calculatedTotals.taxAmount;
-            const invoiceSubtotal = calculatedTotals.subtotal;
-            const taxCalculationMethod = calculatedTotals.taxCalculationMethod;
-            
-            const selectedAccount = accounts.find(acc => acc._id === paymentForm.account);
-            const totalItemPayment = paymentForm.itemPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-            const paymentAmount = paymentForm.paymentMode === 'full' 
-              ? (Number(paymentForm.amount) || 0)
-              : totalItemPayment;
-            const remainingBalance = invoiceBalance - paymentAmount;
-            const accountSplitsSum = (paymentForm.accountSplits || []).reduce(
-              (s, r) => s + (Number(r.amount) || 0),
-              0
-            );
-            
-            return (
-              <form onSubmit={handleProcessPayment} className="flex flex-col flex-1 min-h-0">
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                  {error && (
-                    <div
-                      role="alert"
-                      className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-start gap-2"
-                    >
-                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>{error}</span>
-                    </div>
-                  )}
-                  {/* Invoice Summary Card */}
-                  <div className="bg-muted/50 border border-border rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Subtotal:</span>
-                      <span className="text-sm font-semibold">{formatCurrency(invoiceSubtotal)}</span>
-                    </div>
-                    {invoiceTaxAmount > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {taxCalculationMethod === 'product' ? 'Tax (Product-Level):' : `Tax (${selectedInvoice.taxRate || 0}%):`}
-                        </span>
-                        <span className="text-sm font-semibold">{formatCurrency(invoiceTaxAmount)}</span>
-                      </div>
-                    )}
-                    {selectedInvoice.discount > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Discount:</span>
-                        <span className="text-sm font-semibold text-red-600">-{formatCurrency(selectedInvoice.discount || 0)}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <span className="text-sm font-medium">Total Amount:</span>
-                      <span className="text-sm font-semibold">{formatCurrency(invoiceTotalAmount)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Paid Amount:</span>
-                      <span className="text-sm font-semibold text-green-600">{formatCurrency(selectedInvoice.paidAmount || 0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <span className="text-sm font-medium">Outstanding Balance:</span>
-                      <span className={`text-sm font-bold ${invoiceBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatCurrency(invoiceBalance)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <Tabs
-                    value={paymentModalTab}
-                    onValueChange={(v) => {
-                      setPaymentModalTab(v);
-                      if (v === 'account') {
-                        setPaymentForm((prev) => {
-                          if (!prev.accountSplitEnabled || !prev.accountSplits || prev.accountSplits.length < 2) {
-                            return prev;
-                          }
-                          const payAmt =
-                            prev.paymentMode === 'full'
-                              ? Number(prev.amount) || 0
-                              : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
-                          return {
-                            ...prev,
-                            accountSplits: redistributeAccountSplits(prev.accountSplits, payAmt),
-                          };
-                        });
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="payment">Payment</TabsTrigger>
-                      <TabsTrigger value="account">Account</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="payment" className="space-y-4 mt-4">
-                  {/* Payment Mode Selection */}
-                  <div>
-                    <label className="block text-sm font-medium mb-3">Payment Mode</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const totals = calculateInvoiceTotals(selectedInvoice);
-                          const balance = totals.balanceAmount;
-                          setPaymentForm((prev) => {
-                            const next = {
-                              ...prev,
-                              paymentMode: 'full',
-                              amount: balance > 0 ? String(balance) : '',
-                              itemPayments: [],
-                            };
-                            if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                              return next;
-                            }
-                            const payAmt = Number(next.amount) || 0;
-                            return {
-                              ...next,
-                              accountSplits: redistributeAccountSplits(next.accountSplits, payAmt),
-                            };
-                          });
-                        }}
-                        className={`p-3 border-2 rounded-lg text-left transition-all ${
-                          paymentForm.paymentMode === 'full'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-primary/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <input
-                            type="radio"
-                            name="paymentMode"
-                            value="full"
-                            checked={paymentForm.paymentMode === 'full'}
-                            onChange={() => {}}
-                            className="w-4 h-4"
-                          />
-                          <span className="font-medium">Full Payment</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-6">Pay the entire outstanding balance</p>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPaymentForm((prev) => {
-                            const next = { ...prev, paymentMode: 'items', amount: '' };
-                            if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                              return next;
-                            }
-                            const payAmt = next.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
-                            return {
-                              ...next,
-                              accountSplits: redistributeAccountSplits(next.accountSplits, payAmt),
-                            };
-                          })
-                        }
-                        className={`p-3 border-2 rounded-lg text-left transition-all ${
-                          paymentForm.paymentMode === 'items'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border hover:border-primary/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <input
-                            type="radio"
-                            name="paymentMode"
-                            value="items"
-                            checked={paymentForm.paymentMode === 'items'}
-                            onChange={() => {}}
-                            className="w-4 h-4"
-                          />
-                          <span className="font-medium">Item-Level Payment</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground ml-6">Pay specific invoice items</p>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Description</label>
-                    <textarea
-                      value={paymentForm.description}
-                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, description: e.target.value }))}
-                      placeholder="Payment description (optional)"
-                      rows={2}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    />
-                  </div>
-
-                  {paymentForm.paymentMode === 'full' ? (
-                    <>
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-sm font-medium">Amount (₹) *</label>
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const totals = calculateInvoiceTotals(selectedInvoice);
-                                const balance = totals.balanceAmount;
-                                setPaymentForm((prev) => {
-                                  const next = { ...prev, amount: String(balance) };
-                                  if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                                    return next;
-                                  }
-                                  return {
-                                    ...next,
-                                    accountSplits: redistributeAccountSplits(next.accountSplits, balance),
-                                  };
-                                });
-                              }}
-                              className="h-7 text-xs"
-                            >
-                              Pay Full
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const totals = calculateInvoiceTotals(selectedInvoice);
-                                const balance = totals.balanceAmount;
-                                const half = Math.max(0, balance * 0.5);
-                                setPaymentForm((prev) => {
-                                  const next = { ...prev, amount: String(half) };
-                                  if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                                    return next;
-                                  }
-                                  return {
-                                    ...next,
-                                    accountSplits: redistributeAccountSplits(next.accountSplits, half),
-                                  };
-                                });
-                              }}
-                              className="h-7 text-xs"
-                            >
-                              Pay 50%
-                            </Button>
-                          </div>
-                        </div>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          max={invoiceBalance}
-                          required
-                          value={paymentForm.amount}
-                          onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
-                          onBlur={() => {
-                            setPaymentForm((prev) => {
-                              if (!prev.accountSplitEnabled || !prev.accountSplits || prev.accountSplits.length < 2) {
-                                return prev;
-                              }
-                              const payAmt = Number(prev.amount) || 0;
-                              return {
-                                ...prev,
-                                accountSplits: redistributeAccountSplits(prev.accountSplits, payAmt),
-                              };
-                            });
-                          }}
-                          placeholder="0.00"
-                        />
-                        {paymentForm.amount && Number(paymentForm.amount) > invoiceBalance && (
-                          <p className="text-xs text-red-600 mt-1">Amount exceeds outstanding balance</p>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <label className="block text-sm font-medium">Item Payments</label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              const itemPayments = (selectedInvoice.items || [])
-                                .map((item, index) => {
-                                  const itemBalance = getItemBalanceForPayment(
-                                    selectedInvoice,
-                                    item,
-                                    index,
-                                    invoiceSubtotal,
-                                    invoiceTaxAmount
-                                  );
-                                  return itemBalance > 0 ? { itemIndex: index, amount: itemBalance } : null;
-                                })
-                                .filter(Boolean);
-                              const totalAmount = itemPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-                              setPaymentForm((prev) => {
-                                const next = {
-                                  ...prev,
-                                  itemPayments,
-                                  amount: String(totalAmount),
-                                };
-                                if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                                  return next;
-                                }
-                                return {
-                                  ...next,
-                                  accountSplits: redistributeAccountSplits(next.accountSplits, totalAmount),
-                                };
-                              });
-                            }}
-                            className="h-7 text-xs"
-                          >
-                            Pay All Items
-                          </Button>
-                        </div>
-                        <div className="space-y-2 max-h-64 overflow-y-auto border border-border rounded-md p-3">
-                          {(selectedInvoice.items || []).map((item, index) => {
-                            const itemTotalWithTax = getItemTotalWithTax(
-                              selectedInvoice,
-                              item,
-                              invoiceSubtotal,
-                              invoiceTaxAmount
-                            );
-                            const itemBalance = getItemBalanceForPayment(
-                              selectedInvoice,
-                              item,
-                              index,
-                              invoiceSubtotal,
-                              invoiceTaxAmount
-                            );
-                            if (itemBalance <= 0) return null;
-                            
-                            const itemPayment = paymentForm.itemPayments.find(ip => ip.itemIndex === index) || { itemIndex: index, amount: 0 };
-                            const isSelected = itemPayment.amount > 0;
-                            
-                            return (
-                              <div key={index} className={`border rounded-md p-3 transition-all ${isSelected ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                                <div className="flex items-start gap-3">
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={(e) => {
-                                      const updatedPayments = paymentForm.itemPayments.filter(ip => ip.itemIndex !== index);
-                                      if (e.target.checked) {
-                                        updatedPayments.push({ itemIndex: index, amount: itemBalance });
-                                      }
-                                      const totalAmount = updatedPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-                                      setPaymentForm((prev) => {
-                                        const next = {
-                                          ...prev,
-                                          itemPayments: updatedPayments,
-                                          amount: String(totalAmount),
-                                        };
-                                        if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                                          return next;
-                                        }
-                                        return {
-                                          ...next,
-                                          accountSplits: redistributeAccountSplits(next.accountSplits, totalAmount),
-                                        };
-                                      });
-                                    }}
-                                    className="mt-1 w-4 h-4"
-                                  />
-                                  <div className="flex-1">
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1">
-                                        <p className="text-sm font-medium">{item.description || `Item ${index + 1}`}</p>
-                                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
-                                          <span>Amount: {formatCurrency(item.amount || 0)}</span>
-                                          {itemTotalWithTax > (item.amount || 0) && (
-                                            <span>Tax: {formatCurrency(itemTotalWithTax - (item.amount || 0))}</span>
-                                          )}
-                                          <span className="font-medium">Total (incl. tax): {formatCurrency(itemTotalWithTax)}</span>
-                                          <span>Paid: {formatCurrency(item.paidAmount || 0)}</span>
-                                          <span className="font-medium text-red-600">Balance: {formatCurrency(itemBalance)}</span>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    {isSelected && (
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        max={itemBalance}
-                                        value={itemPayment.amount || 0}
-                                        onChange={(e) => {
-                                          const amount = Number(e.target.value) || 0;
-                                          const updatedPayments = paymentForm.itemPayments.filter(ip => ip.itemIndex !== index);
-                                          if (amount > 0) {
-                                            updatedPayments.push({ itemIndex: index, amount: Math.min(amount, itemBalance) });
-                                          }
-                                          const totalAmount = updatedPayments.reduce((sum, ip) => sum + (ip.amount || 0), 0);
-                                          setPaymentForm((prev) => {
-                                            const next = {
-                                              ...prev,
-                                              itemPayments: updatedPayments,
-                                              amount: String(totalAmount),
-                                            };
-                                            if (!next.accountSplitEnabled || !next.accountSplits || next.accountSplits.length < 2) {
-                                              return next;
-                                            }
-                                            return {
-                                              ...next,
-                                              accountSplits: redistributeAccountSplits(next.accountSplits, totalAmount),
-                                            };
-                                          });
-                                        }}
-                                        placeholder="0.00"
-                                        className="mt-2"
-                                      />
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {paymentForm.itemPayments.length === 0 && (
-                            <p className="text-sm text-muted-foreground text-center py-4">
-                              Select items to pay by checking the boxes above
-                            </p>
-                          )}
-                          {paymentForm.itemPayments.length > 0 && (
-                            <div className="pt-2 border-t border-border mt-2">
-                              <div className="flex justify-between text-sm font-semibold">
-                                <span>Total Payment:</span>
-                                <span className="text-primary">{formatCurrency(totalItemPayment)}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Payment Details */}
-                  <Separator />
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Payment Date *</label>
-                      <Input
-                        type="date"
-                        required
-                        value={paymentForm.paymentDate}
-                        onChange={(e) => setPaymentForm((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Payment Method</label>
-                      <Select
-                        value={paymentForm.paymentMethod}
-                        onValueChange={(value) => setPaymentForm((prev) => ({ ...prev, paymentMethod: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_METHODS.map((m) => (
-                            <SelectItem key={m.value} value={m.value}>
-                              <span className="flex items-center gap-2">
-                                <span>{m.icon}</span>
-                                {m.label}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* Payment Method Specific Fields */}
-                  {(paymentForm.paymentMethod === 'cheque' || paymentForm.paymentMethod === 'bank-transfer' || paymentForm.paymentMethod === 'upi' || paymentForm.paymentMethod === 'neft' || paymentForm.paymentMethod === 'rtgs') && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {paymentForm.paymentMethod === 'cheque' && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Cheque Number</label>
-                            <Input
-                              value={paymentForm.chequeNumber}
-                              onChange={(e) => setPaymentForm((prev) => ({ ...prev, chequeNumber: e.target.value }))}
-                              placeholder="Cheque number"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Cheque Date</label>
-                            <Input
-                              type="date"
-                              value={paymentForm.chequeDate}
-                              onChange={(e) => setPaymentForm((prev) => ({ ...prev, chequeDate: e.target.value }))}
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="block text-sm font-medium mb-2">Bank Name</label>
-                            <Input
-                              value={paymentForm.bankName}
-                              onChange={(e) => setPaymentForm((prev) => ({ ...prev, bankName: e.target.value }))}
-                              placeholder="Bank name"
-                            />
-                          </div>
-                        </>
-                      )}
-                      {(paymentForm.paymentMethod === 'bank-transfer' || paymentForm.paymentMethod === 'upi' || paymentForm.paymentMethod === 'neft' || paymentForm.paymentMethod === 'rtgs') && (
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium mb-2">Transaction ID / Reference</label>
-                          <Input
-                            value={paymentForm.transactionId}
-                            onChange={(e) => setPaymentForm((prev) => ({ ...prev, transactionId: e.target.value }))}
-                            placeholder="Transaction ID or reference number"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Reference / Notes</label>
-                    <Input
-                      value={paymentForm.reference}
-                      onChange={(e) => setPaymentForm((prev) => ({ ...prev, reference: e.target.value }))}
-                      placeholder="Additional reference or notes"
-                    />
-                  </div>
-
-                    </TabsContent>
-
-                    <TabsContent value="account" className="space-y-4 mt-4">
-                  {/* Account Selection */}
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Payment total: <span className="font-semibold text-foreground">{formatCurrency(paymentAmount)}</span>
-                      {paymentForm.paymentMode === 'items' && (
-                        <span className="ml-1">(item-level total)</span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="account-split"
-                        checked={paymentForm.accountSplitEnabled}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setPaymentForm((prev) => {
-                              const totals = calculateInvoiceTotals(selectedInvoice);
-                              const bal = totals.balanceAmount;
-                              const payAmt =
-                                prev.paymentMode === 'full'
-                                  ? Number(prev.amount) || bal
-                                  : prev.itemPayments.reduce(
-                                      (s, ip) => s + (Number(ip.amount) || 0),
-                                      0
-                                    );
-                              const half = Math.round((payAmt / 2) * 100) / 100;
-                              const rest = Math.round((payAmt - half) * 100) / 100;
-                              return {
-                                ...prev,
-                                accountSplitEnabled: true,
-                                accountSplits: [
-                                  { account: prev.account, amount: String(half) },
-                                  { account: '', amount: String(rest) },
-                                ],
-                              };
-                            });
-                          } else {
-                            setPaymentForm((prev) => ({
-                              ...prev,
-                              accountSplitEnabled: false,
-                              accountSplits: [],
-                              account: prev.accountSplits?.[0]?.account || prev.account,
-                            }));
-                          }
-                        }}
-                      />
-                      <label htmlFor="account-split" className="text-sm font-medium cursor-pointer">
-                        Split across multiple accounts
-                      </label>
-                    </div>
-
-                    {!paymentForm.accountSplitEnabled ? (
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Account *
-                          {selectedAccount && (
-                            <span className="ml-2 text-xs text-muted-foreground font-normal">
-                              (Balance: {formatCurrency(selectedAccount.balance || 0)})
-                            </span>
-                          )}
-                        </label>
-                        <Select
-                          value={paymentForm.account || undefined}
-                          onValueChange={(value) => setPaymentForm((prev) => ({ ...prev, account: value }))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select account" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {accounts.map((acc) => (
-                              <SelectItem key={acc._id} value={acc._id}>
-                                {acc.name} {acc.accountType ? `(${acc.accountType})` : ''} - {formatCurrency(acc.balance || 0)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <label className="block text-sm font-medium">Account splits *</label>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="h-8 text-xs"
-                            onClick={() => {
-                              setPaymentForm((prev) => {
-                                if (!prev.accountSplits || prev.accountSplits.length < 2) return prev;
-                                const payAmt =
-                                  prev.paymentMode === 'full'
-                                    ? Number(prev.amount) || 0
-                                    : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
-                                return {
-                                  ...prev,
-                                  accountSplits: redistributeAccountSplits(prev.accountSplits, payAmt),
-                                };
-                              });
-                            }}
-                          >
-                            Match payment total
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Allocate {formatCurrency(paymentAmount)} across at least two different accounts. Use &quot;Match
-                          payment total&quot; after changing the amount on the Payment tab.
-                        </p>
-                        {(paymentForm.accountSplits || []).map((row, idx) => {
-                          const rowAcc = accounts.find((a) => a._id === row.account);
-                          return (
-                            <div key={idx} className="flex flex-wrap gap-2 items-end">
-                              <div className="flex-1 min-w-[180px]">
-                                <Select
-                                  value={row.account || undefined}
-                                  onValueChange={(value) => {
-                                    setPaymentForm((prev) => {
-                                      const next = [...(prev.accountSplits || [])];
-                                      next[idx] = { ...next[idx], account: value };
-                                      return { ...prev, accountSplits: next };
-                                    });
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Account" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {accounts.map((acc) => (
-                                      <SelectItem key={acc._id} value={acc._id}>
-                                        {acc.name} {acc.accountType ? `(${acc.accountType})` : ''} —{' '}
-                                        {formatCurrency(acc.balance || 0)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="w-32">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={row.amount}
-                                  onChange={(e) => {
-                                    setPaymentForm((prev) => {
-                                      const next = [...(prev.accountSplits || [])];
-                                      next[idx] = { ...next[idx], amount: e.target.value };
-                                      return { ...prev, accountSplits: next };
-                                    });
-                                  }}
-                                  placeholder="0.00"
-                                />
-                              </div>
-                              {(paymentForm.accountSplits || []).length > 2 && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="shrink-0"
-                                  onClick={() => {
-                                    setPaymentForm((prev) => {
-                                      const list = [...(prev.accountSplits || [])];
-                                      if (list.length <= 2) return prev;
-                                      list.splice(idx, 1);
-                                      const payAmt =
-                                        prev.paymentMode === 'full'
-                                          ? Number(prev.amount) || 0
-                                          : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
-                                      return {
-                                        ...prev,
-                                        accountSplits: redistributeAccountSplits(list, payAmt),
-                                      };
-                                    });
-                                  }}
-                                  aria-label="Remove split"
-                                >
-                                  <Minus className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {rowAcc && (
-                                <span className="text-xs text-muted-foreground pb-2 w-full sm:w-auto">
-                                  Balance: {formatCurrency(rowAcc.balance || 0)}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setPaymentForm((prev) => {
-                              const nextSplits = [...(prev.accountSplits || []), { account: '', amount: '' }];
-                              const payAmt =
-                                prev.paymentMode === 'full'
-                                  ? Number(prev.amount) || 0
-                                  : prev.itemPayments.reduce((s, ip) => s + (Number(ip.amount) || 0), 0);
-                              return {
-                                ...prev,
-                                accountSplits: redistributeAccountSplits(nextSplits, payAmt),
-                              };
-                            });
-                          }}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add account
-                        </Button>
-                        <p
-                          className={`text-xs ${
-                            Math.abs(accountSplitsSum - paymentAmount) > 0.01
-                              ? 'text-amber-600 dark:text-amber-500'
-                              : 'text-muted-foreground'
-                          }`}
-                        >
-                          Split total: {formatCurrency(accountSplitsSum)} · Payment total:{' '}
-                          {formatCurrency(paymentAmount)}
-                          {Math.abs(accountSplitsSum - paymentAmount) > 0.01 &&
-                            ' — use Match payment total or adjust amounts'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                    </TabsContent>
-                  </Tabs>
-
-                  {/* Payment Summary */}
-                  {paymentAmount > 0 && (
-                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">Payment Amount:</span>
-                        <span className="text-sm font-bold text-primary">{formatCurrency(paymentAmount)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Remaining Balance:</span>
-                        <span className={`text-sm font-semibold ${remainingBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          {formatCurrency(remainingBalance)}
-                        </span>
-                      </div>
-                      {remainingBalance <= 0 && (
-                        <p className="text-xs text-green-600 font-medium mt-2">✓ Invoice will be marked as paid</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="px-6 py-4 border-t border-border flex-shrink-0 flex gap-2">
-                  <Button type="button" variant="outline" onClick={closePaymentModal} className="flex-1">
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={
-                      processingPayment ||
-                      paymentAmount <= 0 ||
-                      (paymentForm.paymentMode === 'items' && paymentForm.itemPayments.length === 0) ||
-                      (paymentForm.accountSplitEnabled &&
-                        Math.abs(accountSplitsSum - paymentAmount) > 0.01)
-                    }
-                    className="flex-1"
-                  >
-                    {processingPayment ? 'Recording...' : `Record Payment ${paymentAmount > 0 ? `(${formatCurrency(paymentAmount)})` : ''}`}
-                  </Button>
-                </div>
-              </form>
-            );
-          })()}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowPostSubmitPopover(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!createdPaymentId}
+              onClick={() => {
+                if (!createdPaymentId) return;
+                setShowPostSubmitPopover(false);
+                router.push(`/app/payments/${createdPaymentId}`);
+              }}
+            >
+              View Transaction
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showStudentPicker} onOpenChange={setShowStudentPicker}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Find Student</DialogTitle>
+            <DialogDescription>Search by name, roll number, or email</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search students…" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} className="pl-10 rounded-xl" />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                { key: 'courseId', placeholder: 'Course', options: courses.map(c => ({ value: c._id, label: c.name })), resetKeys: [] },
+                { key: 'levelA', placeholder: levelLabels.A, options: studentLevelOptions.levelA.map(v => ({ value: v, label: v })), resetKeys: ['levelB', 'levelC'] },
+                { key: 'levelB', placeholder: levelLabels.B, options: studentLevelOptions.levelB.map(v => ({ value: v, label: v })), disabled: !studentFilters.levelA, resetKeys: ['levelC'] },
+                { key: 'levelC', placeholder: levelLabels.C, options: studentLevelOptions.levelC.map(v => ({ value: v, label: v })), disabled: !studentFilters.levelB, resetKeys: [] },
+              ].map(f => (
+                <Select key={f.key} value={studentFilters[f.key] || undefined} disabled={f.disabled}
+                  onValueChange={(v) => setStudentFilters(prev => { const n = { ...prev, [f.key]: v === 'all' ? '' : v }; (f.resetKeys || []).forEach(k => { n[k] = ''; }); return n; })}>
+                  <SelectTrigger className="rounded-xl text-sm h-9"><SelectValue placeholder={f.placeholder} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All {f.placeholder}</SelectItem>
+                    {f.options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ))}
+            </div>
+            <div className="border border-border rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+              {studentLoading ? (
+                <div className="p-10 text-center text-sm text-muted-foreground">Searching…</div>
+              ) : students.length === 0 ? (
+                <div className="p-10 text-center text-sm text-muted-foreground">No students found</div>
+              ) : students.map(student => (
+                <div key={student._id} onClick={() => handleSelectStudent(student)}
+                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/60 cursor-pointer border-b border-border last:border-0 transition-colors group">
+                  <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center flex-shrink-0">
+                    <User className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm">{student.name}</p>
+                    <p className="text-xs text-muted-foreground">{student.rollNumber || student.studentId || 'N/A'} · {student.email || 'No email'}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {renderPaymentModal()}
     </div>
   );
 }

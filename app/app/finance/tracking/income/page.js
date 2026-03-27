@@ -60,6 +60,15 @@ const formatCurrency = (value) => {
   }
 };
 
+// API `serialNumber` -> display as 5-digit receipt number (e.g. 1 -> 00001)
+const formatReceiptNumber = (serialNumber) => {
+  if (serialNumber === null || serialNumber === undefined || serialNumber === '') return '';
+  const digits = String(serialNumber).replace(/\D/g, '');
+  if (!digits) return '';
+  // Keep display consistent at exactly 5 digits.
+  return digits.padStart(5, '0').slice(-5);
+};
+
 const EMPTY_RECIPIENT = { name: '', phone: '', email: '', address: '' };
 
 const EMPTY_INCOME = {
@@ -126,6 +135,7 @@ export default function FinanceTrackingIncomePage() {
             (i.recipient && typeof i.recipient === 'object' && (i.recipient.name || '').toLowerCase().includes(q))
         );
       }
+      // `serialNumber` is expected from the API; use it as-is.
       setIncomes(list);
     } catch (err) {
       setError(err.message || 'Failed to load income');
@@ -308,8 +318,9 @@ export default function FinanceTrackingIncomePage() {
   };
 
   const exportCsv = () => {
-    const headers = ['Title', 'Amount', 'Date', 'Category', 'Account', 'Recipient', 'Reference', 'Notes'];
+    const headers = ['Receipt Number', 'Title', 'Amount', 'Date', 'Category', 'Account', 'Recipient', 'Reference', 'Notes'];
     const rows = incomes.map((i) => [
+      formatReceiptNumber(i.serialNumber),
       i.title || '',
       i.amount ?? '',
       i.date ? new Date(i.date).toISOString().split('T')[0] : '',
@@ -330,6 +341,14 @@ export default function FinanceTrackingIncomePage() {
 
   const columns = useMemo(
     () => [
+      {
+        id: 'serialNumber',
+        accessorKey: 'serialNumber',
+        accessorFn: (row) => formatReceiptNumber(row.serialNumber),
+        header: 'Receipt Number',
+        type: 'text',
+        cell: ({ row }) => <span className="font-medium">{formatReceiptNumber(row.serialNumber) || '—'}</span>,
+      },
       { id: 'title', accessorKey: 'title', header: 'Title', type: 'text', searchable: true, cell: ({ row }) => (
         <span className="flex items-center gap-2">
           <span className="font-medium">{row.title || 'Untitled'}</span>

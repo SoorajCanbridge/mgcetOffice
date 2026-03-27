@@ -62,6 +62,14 @@ const escapeHtml = (s) => {
     .replace(/"/g, '&quot;');
 };
 
+// API `serialNumber` -> display as 5-digit voucher number (e.g. 1 -> 00001)
+const formatVoucherNumber = (serialNumber) => {
+  if (serialNumber === null || serialNumber === undefined || serialNumber === '') return '';
+  const digits = String(serialNumber).replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.padStart(5, '0').slice(-5);
+};
+
 export default function ExpenseDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -215,7 +223,7 @@ export default function ExpenseDetailsPage() {
           <p style="font-size:11px;color:#64748b;margin:6px 0 0;font-weight:500;">Expense Voucher</p>
         </div>
         <div style="text-align:right;font-size:11px;color:#64748b;">
-          <p style="margin:0;">Voucher # ${escapeHtml(expense.referenceNumber || expenseId?.slice(-8) || '—')}</p>
+          <p style="margin:0;">Voucher # ${escapeHtml(formatVoucherNumber(expense.serialNumber) || expense.referenceNumber || expenseId?.slice(-8) || '—')}</p>
           <p style="margin:4px 0 0;">${escapeHtml(formatDateForDisplay(expense.date))}</p>
         </div>
       </div>
@@ -254,8 +262,8 @@ export default function ExpenseDetailsPage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Expense Voucher - ${escapeHtml(expense.title || 'Details')}</title>
-          <style>* { margin: 0; padding: 0; box-sizing: border-box; } body { background: #fff; padding: 12px; } @media print { body { padding: 0; } @page { size: A4; margin: 1cm; } }</style>
+          <title>Expense Voucher - ${escapeHtml(formatVoucherNumber(expense.serialNumber) || expense.title || 'Details')}</title>
+          <style>* { margin: 0; padding: 0; box-sizing: border-box; } body { background: #fff; padding: 0; } @media print { body { padding: 0; } @page { size: A4; margin: 0.8cm; } }</style>
         </head>
         <body>${receiptHtml}</body>
       </html>
@@ -296,6 +304,7 @@ export default function ExpenseDetailsPage() {
   const hasRecipient = expense.recipient && typeof expense.recipient === 'object' && (expense.recipient.name || expense.recipient.phone || expense.recipient.email || expense.recipient.address) || expense.vendor;
   const recipient = expense.recipient && typeof expense.recipient === 'object' ? expense.recipient : {};
   const recipientName = recipient.name || expense.vendor || '';
+  const voucherNum = formatVoucherNumber(expense.serialNumber);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -311,7 +320,7 @@ export default function ExpenseDetailsPage() {
                 <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">Cancelled</span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">{expense.referenceNumber || expenseId}</p>
+            <p className="text-sm text-muted-foreground">{voucherNum || expense.referenceNumber || expenseId}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -337,32 +346,66 @@ export default function ExpenseDetailsPage() {
         className="receipt-paper bg-white dark:bg-white text-slate-900 shadow-lg border border-slate-200 rounded-lg print:shadow-none print:border print:rounded-none print:max-w-none overflow-hidden"
         style={{ maxWidth: '21cm' }}
       >
-        <div className="flex items-start gap-4 px-6 sm:px-8 py-4 border-b-2 border-red-600">
-          {college?.logo ? (
-            <img src={getLogoUrl(college.logo, API_URL, true)} alt="" className="h-14 w-14 object-contain rounded-lg border border-slate-200 shrink-0" />
-          ) : (
-            <div className="h-14 w-14 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-red-600 font-bold text-xl shrink-0">₹</div>
-          )}
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold text-slate-900">{college?.name || 'College'}</h2>
-            {(college?.address || college?.city || college?.state || college?.pincode) && (
-              <p className="text-xs text-slate-500 mt-1">
-                {[college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean).join(' — ')}
-              </p>
-            )}
-            {(college?.phone || college?.email || college?.website) && (
-              <div className="flex flex-wrap gap-x-3 gap-y-0 mt-1.5 text-xs text-slate-500">
-                {college?.phone && <span>{college.phone}</span>}
-                {college?.email && <span>{college.email}</span>}
-                {college?.website && <span>{college.website}</span>}
+        <div className="relative px-6 sm:px-8 pt-6 pb-5 border-b border-slate-200">
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex items-start gap-4 min-w-0">
+              {college?.logo ? (
+                <img
+                  src={getLogoUrl(college.logo, API_URL, true)}
+                  alt=""
+                  className="h-14 w-14 object-contain rounded-xl border border-slate-200 shrink-0 bg-slate-50 p-1"
+                />
+              ) : (
+                <div className="h-14 w-14 rounded-xl border border-[color:var(--error)]/20 bg-[color:var(--error)]/10 flex items-center justify-center text-[color:var(--error)] font-bold text-2xl shrink-0">
+                  ₹
+                </div>
+              )}
+
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-bold text-slate-900">{college?.name || 'College'}</h2>
+                {(college?.address || college?.city || college?.state || college?.pincode) && (
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    {[college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean).join(' — ')}
+                  </p>
+                )}
+                {(college?.phone || college?.email || college?.website) && (
+                  <div className="flex flex-wrap gap-x-3 gap-y-0 mt-1.5 text-xs text-slate-500">
+                    {college?.phone && <span>{college.phone}</span>}
+                    {college?.email && <span>{college.email}</span>}
+                    {college?.website && <span>{college.website}</span>}
+                  </div>
+                )}
+                <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                  Expense Voucher
+                </span>
               </div>
-            )}
-            <p className="text-xs text-slate-500 mt-1 font-medium">Expense Voucher</p>
+            </div>
+
+            <div className="text-right shrink-0">
+              <p className="text-[10px] uppercase tracking-[0.15em] text-slate-400 font-bold mb-1">Voucher No.</p>
+              <p className="text-2xl font-bold text-slate-700 tabular-nums font-mono leading-none tracking-wide">
+                {voucherNum || expense.referenceNumber || expenseId?.slice(-8) || '—'}
+              </p>
+              <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full border text-xs font-semibold tracking-wide uppercase"
+                style={{
+                  background: expense.isCancelled ? 'rgba(239, 68, 68, 0.10)' : 'rgba(16, 185, 129, 0.10)',
+                  borderColor: expense.isCancelled ? 'rgba(239, 68, 68, 0.25)' : 'rgba(16, 185, 129, 0.25)',
+                  color: expense.isCancelled ? 'rgb(220, 38, 38)' : 'rgb(5, 150, 105)',
+                }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full inline-block"
+                  style={{
+                    background: expense.isCancelled ? 'rgb(220, 38, 38)' : 'rgb(5, 150, 105)',
+                  }}
+                />
+                {expense.isCancelled ? 'Cancelled' : 'Active'}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{formatDateForDisplay(expense.date)}</p>
+            </div>
           </div>
-          <div className="text-right shrink-0 text-sm">
-            <p className="font-medium text-slate-700">Voucher # {expense.referenceNumber || expenseId?.slice(-8) || '—'}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{formatDateForDisplay(expense.date)}</p>
-          </div>
+
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-[color:var(--error)]/60 via-[color:var(--success)]/40 to-transparent" />
         </div>
 
         <div className="px-6 sm:px-8 py-5">

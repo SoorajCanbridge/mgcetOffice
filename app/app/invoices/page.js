@@ -81,6 +81,7 @@ const EMPTY_INVOICE = {
   },
   items: [],
   taxCalculationMethod: 'total', // 'product' or 'total'
+  lineItemDiscountEnabled: false,
   taxRate: 0,
   discount: 0,
   paidAmount: 0,
@@ -468,7 +469,10 @@ export default function InvoicesPage() {
       if (field === 'paidAmount') {
         const paidAmount = Number(value) || 0;
         const itemAmount = Number(newItems[index].amount) || 0;
-        newItems[index].paidAmount = Math.min(paidAmount, itemAmount);
+        const itemDiscount = Number(newItems[index].discount) || 0;
+        const itemTax = Number(newItems[index].taxAmount) || 0;
+        const itemPayable = Math.max(0, itemAmount - itemDiscount + itemTax);
+        newItems[index].paidAmount = Math.min(paidAmount, itemPayable);
       }
       // Recalculate total paidAmount from items
       const totalPaid = newItems.reduce((sum, item) => sum + (Number(item.paidAmount) || 0), 0);
@@ -486,6 +490,7 @@ export default function InvoicesPage() {
           quantity: 1,
           unitPrice: 0,
           amount: 0,
+          discount: 0,
           taxRate: prev.taxCalculationMethod === 'product' ? (prev.taxRate || 0) : 0,
           taxAmount: 0,
           paidAmount: 0,
@@ -518,6 +523,7 @@ export default function InvoicesPage() {
             quantity,
             unitPrice,
             amount,
+            discount: Number(item.discount) || 0,
             taxRate: itemTaxRate,
             taxAmount,
             paidAmount: 0,
@@ -527,6 +533,7 @@ export default function InvoicesPage() {
           ...prev,
           items,
           taxCalculationMethod,
+          lineItemDiscountEnabled: items.some((i) => (Number(i.discount) || 0) > 0),
           taxRate: templateTaxRate,
           discount: Number(content.discount) || 0,
           savedContent: contentId,
@@ -592,6 +599,7 @@ export default function InvoicesPage() {
     ).map(item => {
       const itemData = {
         ...item,
+        discount: Number(item.discount) || 0,
         paidAmount: item.paidAmount || 0,
       };
       
@@ -610,6 +618,14 @@ export default function InvoicesPage() {
     });
 
     const isEditing = !!editingInvoice?._id;
+    const itemDiscountSum = filteredItems.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    const invoiceDiscount = Number(invoiceForm.discount) || 0;
+
+    if (itemDiscountSum > invoiceDiscount) {
+      setError('Sum of item discounts cannot be greater than invoice discount.');
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       invoiceNumber: invoiceForm.invoiceNumber.trim(),
@@ -620,7 +636,7 @@ export default function InvoicesPage() {
       items: filteredItems,
       taxCalculationMethod: invoiceForm.taxCalculationMethod || 'total',
       taxRate: Number(invoiceForm.taxRate) || 0,
-      discount: Number(invoiceForm.discount) || 0,
+      discount: invoiceDiscount,
       paidAmount: filteredItems.reduce((sum, item) => sum + (Number(item.paidAmount) || 0), 0),
       notes: invoiceForm.notes.trim() || undefined,
       terms: invoiceForm.terms.trim() || undefined,
@@ -686,11 +702,13 @@ export default function InvoicesPage() {
       },
       items: (invoice.items || []).map(item => ({
         ...item,
+        discount: item.discount || 0,
         taxRate: item.taxRate || 0,
         taxAmount: item.taxAmount || 0,
         paidAmount: item.paidAmount || 0,
       })),
       taxCalculationMethod: invoice.taxCalculationMethod || 'total',
+      lineItemDiscountEnabled: (invoice.items || []).some((item) => (Number(item.discount) || 0) > 0),
       taxRate: invoice.taxRate || 0,
       discount: invoice.discount || 0,
       paidAmount: invoice.paidAmount || 0,
@@ -1134,6 +1152,10 @@ export default function InvoicesPage() {
       (sum, item) => sum + (item.amount || 0),
       0,
     );
+    const itemDiscountSum = invoiceForm.items.reduce(
+      (sum, item) => sum + (Number(item.discount) || 0),
+      0,
+    );
     
     let taxAmount = 0;
     if (invoiceForm.taxCalculationMethod === 'product') {
@@ -1160,11 +1182,22 @@ export default function InvoicesPage() {
     return {
       subtotal,
       taxAmount,
+      itemDiscountSum,
       discount,
       totalAmount,
       balanceAmount,
     };
   }, [invoiceForm.items, invoiceForm.taxRate, invoiceForm.taxCalculationMethod, invoiceForm.discount, invoiceForm.paidAmount]);
+
+  useEffect(() => {
+    if (!invoiceForm.lineItemDiscountEnabled) return;
+    const itemDiscountSum = invoiceForm.items.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    setInvoiceForm((prev) => {
+      const prevDiscount = Number(prev.discount) || 0;
+      if (Math.abs(prevDiscount - itemDiscountSum) < 0.01) return prev;
+      return { ...prev, discount: itemDiscountSum };
+    });
+  }, [invoiceForm.lineItemDiscountEnabled, invoiceForm.items]);
 
   // Define columns for Invoices DataTable
   const invoiceColumns = useMemo(() => [
@@ -1900,25 +1933,75 @@ export default function InvoicesPage() {
             {/* Line items */}
             <section className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
                   <Receipt className="h-5 w-5 text-primary" />
                   <h3 className="text-base font-semibold">Line Items</h3>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      checked={invoiceForm.taxCalculationMethod === 'product'}
+                      onCheckedChange={(checked) =>
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          taxCalculationMethod: checked ? 'product' : 'total',
+                          items: prev.items.map((item) => {
+                            const amount = Number(item.amount) || 0;
+                            const nextRate = checked ? (Number(item.taxRate) || Number(prev.taxRate) || 0) : 0;
+                            return {
+                              ...item,
+                              taxRate: nextRate,
+                              taxAmount: checked ? (amount * nextRate) / 100 : 0,
+                            };
+                          }),
+                        }))
+                      }
+                    />
+                    Product-level tax
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      checked={!!invoiceForm.lineItemDiscountEnabled}
+                      onCheckedChange={(checked) =>
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          lineItemDiscountEnabled: !!checked,
+                          items: (prev.items || []).map((item) => ({
+                            ...item,
+                            discount: checked ? (Number(item.discount) || 0) : 0,
+                          })),
+                          discount: checked
+                            ? (prev.items || []).reduce((sum, item) => sum + (Number(item.discount) || 0), 0)
+                            : 0,
+                        }))
+                      }
+                    />
+                    Product-level discount
+                  </label>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Item
                 </Button>
               </div>
-              <div className="p-4 space-y-3">
+              <div className="p-4 space-y-2">
+              {invoiceForm.items.length > 0 && (
+                <div className="grid grid-cols-12 gap-1 px-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                  <div className={invoiceForm.taxCalculationMethod === 'product' || invoiceForm.lineItemDiscountEnabled ? 'col-span-3' : 'col-span-5'}>Description</div>
+                  <div className="col-span-1 text-right">Qty</div>
+                  <div className="col-span-2 text-right">Unit</div>
+                  <div className="col-span-2 text-right">Amount</div>
+                  {invoiceForm.lineItemDiscountEnabled && <div className="col-span-2 text-right">Discount</div>}
+                  {invoiceForm.taxCalculationMethod === 'product' && <div className="col-span-1 text-right">Tax %</div>}
+                  <div className="col-span-1" />
+                </div>
+              )}
               {invoiceForm.items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-12 gap-3 items-end p-3 border border-border rounded-lg bg-background/50"
+                  className="grid grid-cols-12 gap-1 items-center p-2 border border-border rounded-lg bg-background/50"
                 >
-                  <div className={invoiceForm.taxCalculationMethod === 'product' ? 'col-span-4' : 'col-span-5'}>
-                    <label className="block text-xs font-medium mb-1">
-                      Description
-                    </label>
+                  <div className={invoiceForm.taxCalculationMethod === 'product' || invoiceForm.lineItemDiscountEnabled ? 'col-span-3' : 'col-span-5'}>
                     <Input
                       value={item.description}
                       onChange={(e) =>
@@ -1928,14 +2011,11 @@ export default function InvoicesPage() {
                       className="h-9"
                     />
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium mb-1">
-                      Qty
-                    </label>
+                  <div className="col-span-1">
                     <Input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={item.quantity}
                       onChange={(e) =>
                         handleItemChange(
@@ -1948,13 +2028,10 @@ export default function InvoicesPage() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium mb-1">
-                      Unit Price
-                    </label>
                     <Input
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={item.unitPrice}
                       onChange={(e) =>
                         handleItemChange(
@@ -1967,9 +2044,6 @@ export default function InvoicesPage() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs font-medium mb-1">
-                      Amount
-                    </label>
                     <Input
                       type="number"
                       min="0"
@@ -1979,15 +2053,26 @@ export default function InvoicesPage() {
                       className="h-9 bg-muted"
                     />
                   </div>
+                  {invoiceForm.lineItemDiscountEnabled && (
+                  <div className="col-span-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={item.discount || 0}
+                      onChange={(e) =>
+                        handleItemChange(index, 'discount', Number(e.target.value))
+                      }
+                      className="h-9"
+                    />
+                  </div>
+                  )}
                   {invoiceForm.taxCalculationMethod === 'product' && (
-                    <div className="col-span-2">
-                      <label className="block text-xs font-medium mb-1">
-                        Tax %
-                      </label>
+                    <div className="col-span-1">
                       <Input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="1"
                         max="100"
                         value={item.taxRate || 0}
                         onChange={(e) =>
@@ -2032,54 +2117,13 @@ export default function InvoicesPage() {
               </div>
               <div className="p-4">
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                  {/* Left: Tax options */}
+                  {/* Left: inputs */}
                   <div className="lg:col-span-2 space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Tax Calculation Method</label>
-                      <div className="flex flex-wrap gap-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="taxCalculationMethod"
-                            value="total"
-                            checked={invoiceForm.taxCalculationMethod === 'total'}
-                            onChange={(e) => {
-                              setInvoiceForm((prev) => ({
-                                ...prev,
-                                taxCalculationMethod: e.target.value,
-                                items: prev.items.map(item => ({ ...item, taxRate: 0, taxAmount: 0 })),
-                              }));
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm">Total-Level Tax</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="taxCalculationMethod"
-                            value="product"
-                            checked={invoiceForm.taxCalculationMethod === 'product'}
-                            onChange={(e) => {
-                              setInvoiceForm((prev) => ({
-                                ...prev,
-                                taxCalculationMethod: e.target.value,
-                                items: prev.items.map(item => ({
-                                  ...item,
-                                  taxRate: item.taxRate || prev.taxRate || 0,
-                                  taxAmount: item.amount ? ((item.amount * (item.taxRate || prev.taxRate || 0)) / 100) : 0,
-                                })),
-                              }));
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm">Product-Level Tax</span>
-                        </label>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {invoiceForm.taxCalculationMethod === 'total' ? 'Tax on total subtotal' : 'Tax per line item'}
-                      </p>
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {invoiceForm.taxCalculationMethod === 'product'
+                        ? 'Using product-level tax from line items.'
+                        : 'Using total-level tax (default).'}
+                    </p>
                     <div className="grid grid-cols-2 gap-3">
                       {invoiceForm.taxCalculationMethod === 'total' && (
                         <div>
@@ -2105,8 +2149,16 @@ export default function InvoicesPage() {
                           step="0.01"
                           value={invoiceForm.discount}
                           onChange={handleFormChange}
+                          readOnly={!!invoiceForm.lineItemDiscountEnabled}
                           className="h-10"
                         />
+                        {invoiceForm.lineItemDiscountEnabled ? (
+                          <p className="text-xs text-muted-foreground mt-1">Auto-calculated from item discounts.</p>
+                        ) : calculateTotals.itemDiscountSum > (Number(invoiceForm.discount) || 0) ? (
+                          <p className="text-xs text-amber-600 mt-1">
+                            Item discount total ({formatCurrency(calculateTotals.itemDiscountSum)}) is greater than invoice discount.
+                          </p>
+                        ) : null}
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-1.5">Paid (₹)</label>

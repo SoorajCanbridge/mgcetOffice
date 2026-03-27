@@ -60,6 +60,14 @@ const formatCurrency = (value) => {
   }
 };
 
+// API `serialNumber` -> display as 5-digit voucher number (e.g. 1 -> 00001)
+const formatVoucherNumber = (serialNumber) => {
+  if (serialNumber === null || serialNumber === undefined || serialNumber === '') return '';
+  const digits = String(serialNumber).replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.padStart(5, '0').slice(-5);
+};
+
 const EMPTY_RECIPIENT = { name: '', phone: '', email: '', address: '' };
 
 const EMPTY_EXPENSE = {
@@ -123,6 +131,7 @@ export default function FinanceTrackingExpensesPage() {
           (i) =>
             (i.title || '').toLowerCase().includes(q) ||
             ((i.recipient && typeof i.recipient === 'object' && (i.recipient.name || '')) || '').toLowerCase().includes(q) ||
+            (formatVoucherNumber(i.serialNumber) || '').toLowerCase().includes(q) ||
             (i.referenceNumber || '').toLowerCase().includes(q) ||
             (i.notes || '').toLowerCase().includes(q)
         );
@@ -307,8 +316,9 @@ export default function FinanceTrackingExpensesPage() {
   };
 
   const exportCsv = () => {
-    const headers = ['Title', 'Amount', 'Date', 'Category', 'Recipient', 'Account', 'Reference', 'Notes'];
+    const headers = ['Voucher Number', 'Title', 'Amount', 'Date', 'Category', 'Recipient', 'Account', 'Reference', 'Notes'];
     const rows = expenses.map((i) => [
+      formatVoucherNumber(i.serialNumber),
       i.title || '',
       i.amount ?? '',
       i.date ? new Date(i.date).toISOString().split('T')[0] : '',
@@ -329,6 +339,14 @@ export default function FinanceTrackingExpensesPage() {
 
   const columns = useMemo(
     () => [
+      {
+        id: 'serialNumber',
+        accessorKey: 'serialNumber',
+        header: 'Voucher Number',
+        type: 'text',
+        accessorFn: (row) => formatVoucherNumber(row.serialNumber),
+        cell: ({ row }) => <span className="font-medium">{formatVoucherNumber(row.serialNumber) || '—'}</span>,
+      },
       { id: 'title', accessorKey: 'title', header: 'Title', type: 'text', searchable: true, cell: ({ row }) => (
         <span className="flex items-center gap-2">
           <span className="font-medium">{row.title || 'Untitled'}</span>

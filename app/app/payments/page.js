@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import {
   CreditCard,
   Plus,
-  Edit2,
-  Trash2,
   Save,
   X,
   RefreshCcw,
@@ -106,9 +104,7 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [editingPayment, setEditingPayment] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -254,7 +250,6 @@ export default function PaymentsPage() {
 
   const resetForm = useCallback(() => {
     setPaymentForm(EMPTY_PAYMENT);
-    setEditingPayment(null);
     setSelectedInvoice(null);
     setSelectedAccount(null);
     setShowForm(false);
@@ -296,18 +291,8 @@ export default function PaymentsPage() {
         notes: paymentForm.notes.trim() || undefined,
       };
 
-      if (editingPayment?._id) {
-        await api.put(
-          `${PAYMENTS_BASE}/${editingPayment._id}`,
-          payload,
-          {},
-          true,
-        );
-        showSuccess('Payment updated successfully.');
-      } else {
-        await api.post(`${PAYMENTS_BASE}`, payload, {}, true);
-        showSuccess('Payment created successfully.');
-      }
+      await api.post(`${PAYMENTS_BASE}`, payload, {}, true);
+      showSuccess('Payment created successfully.');
       resetForm();
       await fetchPayments();
       await fetchInvoices(); // Refresh invoices to get updated balances
@@ -319,54 +304,8 @@ export default function PaymentsPage() {
     }
   };
 
-  const handleEditPayment = (payment) => {
-    setEditingPayment(payment);
-    setPaymentForm({
-      paymentNumber: payment.paymentNumber || '',
-      paymentDate: formatDateForInput(payment.paymentDate),
-      amount: payment.amount !== undefined ? String(payment.amount) : '',
-      paymentMethod: payment.paymentMethod || 'cash',
-      status: payment.status || 'pending',
-      account: payment.account?._id || payment.account || '',
-      invoice: payment.invoice?._id || payment.invoice || '',
-      student: payment.student?._id || payment.student || '',
-      referenceNumber: payment.referenceNumber || '',
-      transactionId: payment.transactionId || '',
-      chequeNumber: payment.chequeNumber || '',
-      chequeDate: formatDateForInput(payment.chequeDate),
-      bankName: payment.bankName || '',
-      description: payment.description || '',
-      notes: payment.notes || '',
-    });
-    setShowForm(true);
-  };
-
   const handleViewPayment = (paymentId) => {
     router.push(`/app/payments/${paymentId}`);
-  };
-
-  const handleDeletePayment = async (payment) => {
-    if (!payment?._id) return;
-    const confirmed =
-      typeof window !== 'undefined'
-        ? window.confirm(
-            'Delete this payment? This will revert account balance and invoice updates if payment was completed.',
-          )
-        : true;
-    if (!confirmed) return;
-    try {
-      setDeletingId(payment._id);
-      setError('');
-      await api.delete(`${PAYMENTS_BASE}/${payment._id}`, {}, true);
-      showSuccess('Payment deleted.');
-      await fetchPayments();
-      await fetchInvoices(); // Refresh invoices to get updated balances
-      await fetchAccounts(); // Refresh accounts to get updated balances
-    } catch (err) {
-      setError(err.message || 'Failed to delete payment');
-    } finally {
-      setDeletingId('');
-    }
   };
 
   // Calculate summary statistics
@@ -537,33 +476,8 @@ export default function PaymentsPage() {
         <Eye className="h-4 w-4" />
         View
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEditPayment(row);
-        }}
-      >
-        <Edit2 className="h-4 w-4" />
-        Edit
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDeletePayment(row);
-        }}
-        disabled={deletingId === row._id}
-      >
-        <Trash2 className="h-4 w-4" />
-        {deletingId === row._id ? 'Deleting...' : 'Delete'}
-      </Button>
     </div>
-  ), [deletingId, router]);
+  ), [router]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -764,9 +678,7 @@ export default function PaymentsPage() {
           className="bg-card border border-border rounded-lg p-6 space-y-4"
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">
-              {editingPayment ? 'Edit Payment' : 'New Payment'}
-            </h2>
+            <h2 className="text-xl font-semibold">New Payment</h2>
             <Button
               type="button"
               variant="ghost"
@@ -1073,11 +985,7 @@ export default function PaymentsPage() {
             </Button>
             <Button type="submit" disabled={saving}>
               <Save className="h-4 w-4 mr-2" />
-              {saving
-                ? 'Saving...'
-                : editingPayment
-                ? 'Update Payment'
-                : 'Create Payment'}
+              {saving ? 'Saving...' : 'Create Payment'}
             </Button>
           </div>
         </form>
