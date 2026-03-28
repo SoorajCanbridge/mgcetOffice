@@ -195,6 +195,8 @@ export default function StudentsPage() {
       setError('');
       
       const queryParams = new URLSearchParams();
+      // DataTable paginates client-side, so fetch a sufficiently large list.
+      queryParams.append('limit', '1000');
 
       if (filters.courseId) queryParams.append('courseId', filters.courseId);
       if (filters.enrollmentStatus) queryParams.append('enrollmentStatus', filters.enrollmentStatus);

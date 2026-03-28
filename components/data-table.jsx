@@ -289,12 +289,23 @@ export function DataTable({
   }, [data, searchQuery, filters, sortBy, sortOrder, searchable, filterable, sortable, searchableColumns, columns]);
 
   // Pagination
-  const totalPages = Math.ceil(processedData.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(processedData.length / pageSize));
   const paginatedData = useMemo(() => {
     const start = (page - 1) * pageSize;
     const end = start + pageSize;
     return processedData.slice(start, end);
   }, [processedData, page, pageSize]);
+
+  // Keep page index valid when the dataset size changes.
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+      return;
+    }
+    if (page < 1) {
+      setPage(1);
+    }
+  }, [page, totalPages]);
 
   // Handle sorting
   const handleSort = useCallback((columnId) => {

@@ -716,7 +716,7 @@ export default function InvoiceDetailsPage() {
             <CreditCard className="h-4 w-4" />
             Record Payment
           </Button>
-
+          
         </div>
       </div>
 
