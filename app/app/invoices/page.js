@@ -216,6 +216,8 @@ export default function InvoicesPage() {
     paymentMethod: 'bank-transfer',
     reference: '',
     account: '',
+    accountSplitEnabled: false,
+    accountSplits: [],
     itemPayments: [], // Array of { itemIndex, amount }
     paymentMode: 'full', // 'full' or 'items'
     transactionId: '',
@@ -1003,6 +1005,8 @@ export default function InvoicesPage() {
       paymentMethod: 'bank-transfer',
       reference: '',
       account: fullInvoice.account?._id || fullInvoice.account || '',
+      accountSplitEnabled: false,
+      accountSplits: [],
       itemPayments: [],
       paymentMode: 'full',
       transactionId: '',
@@ -1025,6 +1029,8 @@ export default function InvoicesPage() {
       paymentMethod: 'bank-transfer',
       reference: '',
       account: '',
+      accountSplitEnabled: false,
+      accountSplits: [],
       itemPayments: [],
       paymentMode: 'full',
       transactionId: '',
@@ -1057,9 +1063,34 @@ export default function InvoicesPage() {
           return;
         }
 
+        const accountSplitsPayload = (paymentForm.accountSplits || [])
+          .filter((row) => Number(row.amount) > 0 && row.account)
+          .map((row) => ({ account: row.account, amount: Number(row.amount) }));
+        const primaryAccount = accountSplitsPayload.length >= 2
+          ? accountSplitsPayload[0].account
+          : paymentForm.account;
+
+        if (!primaryAccount) {
+          setError('Please select an account.');
+          setProcessingPayment(false);
+          return;
+        }
+
         await api.post(
           `${INVOICE_BASE}/${paymentInvoice._id}/pay-items`,
-          { itemPayments },
+          {
+            itemPayments,
+            account: primaryAccount,
+            ...(accountSplitsPayload.length >= 2 ? { accountSplits: accountSplitsPayload } : {}),
+            paymentDate: paymentForm.paymentDate,
+            paymentMethod: paymentForm.paymentMethod || 'cash',
+            referenceNumber: paymentForm.reference || undefined,
+            transactionId: paymentForm.transactionId || undefined,
+            chequeNumber: paymentForm.chequeNumber || undefined,
+            chequeDate: paymentForm.chequeDate || undefined,
+            bankName: paymentForm.bankName || undefined,
+            notes: paymentForm.description || undefined,
+          },
           {},
           true
         );
