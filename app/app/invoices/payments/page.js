@@ -366,10 +366,10 @@ export default function InvoicePaymentsPage() {
   const extractCreatedPaymentId = (response) => {
     if (!response) return '';
     return (
-      response?.data?._id ||
-      response?._id ||
       response?.data?.payment?._id ||
       response?.payment?._id ||
+      response?.data?._id ||
+      response?._id ||
       response?.data?.paymentId ||
       response?.paymentId ||
       ''

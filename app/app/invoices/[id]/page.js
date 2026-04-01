@@ -252,6 +252,7 @@ export default function InvoiceDetailsPage() {
         status: 'sent',
         billTo: invoice.billTo || {},
         items: invoice.items || [],
+        taxCalculationMethod: invoice.taxCalculationMethod || 'total',
         taxRate: invoice.taxRate ?? 0,
         discount: invoice.discount ?? 0,
         paidAmount: invoice.paidAmount ?? 0,
@@ -859,10 +860,10 @@ export default function InvoiceDetailsPage() {
                     Quantity
                   </th>
                   <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Unit Price
+                    Cost/Fee (₹)
                   </th>
                   <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Amount
+                    Total (₹)
                   </th>
                   {hasItemDiscount && (
                     <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">

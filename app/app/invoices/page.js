@@ -82,6 +82,7 @@ const EMPTY_INVOICE = {
   items: [],
   taxCalculationMethod: 'total', // 'product' or 'total'
   lineItemDiscountEnabled: false,
+  lineItemPaidEnabled: false,
   taxRate: 0,
   discount: 0,
   paidAmount: 0,
@@ -158,6 +159,19 @@ const formatAddressForDisplay = (address) => {
 
 const DEFAULT_LEVEL_LABELS = { A: 'Level A', B: 'Level B', C: 'Level C' };
 const normalizeLevelLabels = (labels) => ({ ...DEFAULT_LEVEL_LABELS, ...(labels || {}) });
+
+/** Line amount after discount + product tax (same cap logic as line paid). */
+const itemLinePayable = (item) => {
+  const itemAmount = Number(item.amount) || 0;
+  const itemDiscount = Number(item.discount) || 0;
+  const itemTax = Number(item.taxAmount) || 0;
+  return Math.max(0, itemAmount - itemDiscount + itemTax);
+};
+
+const capItemPaidToPayable = (item) => ({
+  ...item,
+  paidAmount: Math.min(Number(item.paidAmount) || 0, itemLinePayable(item)),
+});
 
 const normalizeLevelValues = (levelValues) => {
   const leaf = (v) => {
@@ -470,15 +484,24 @@ export default function InvoicesPage() {
       // Ensure paidAmount doesn't exceed amount
       if (field === 'paidAmount') {
         const paidAmount = Number(value) || 0;
-        const itemAmount = Number(newItems[index].amount) || 0;
-        const itemDiscount = Number(newItems[index].discount) || 0;
-        const itemTax = Number(newItems[index].taxAmount) || 0;
-        const itemPayable = Math.max(0, itemAmount - itemDiscount + itemTax);
+        const itemPayable = itemLinePayable(newItems[index]);
         newItems[index].paidAmount = Math.min(paidAmount, itemPayable);
+        const totalPaid = newItems.reduce(
+          (sum, item) => sum + (Number(item.paidAmount) || 0),
+          0,
+        );
+        return { ...prev, items: newItems, paidAmount: totalPaid };
       }
-      // Recalculate total paidAmount from items
-      const totalPaid = newItems.reduce((sum, item) => sum + (Number(item.paidAmount) || 0), 0);
-      return { ...prev, items: newItems, paidAmount: totalPaid };
+      if (prev.lineItemPaidEnabled) {
+        newItems[index] = capItemPaidToPayable(newItems[index]);
+        const totalPaid = newItems.reduce(
+          (sum, item) => sum + (Number(item.paidAmount) || 0),
+          0,
+        );
+        return { ...prev, items: newItems, paidAmount: totalPaid };
+      }
+      // Invoice-level paid only: do not overwrite paid from line sums (lines have no paid UI).
+      return { ...prev, items: newItems };
     });
   };
 
@@ -502,10 +525,12 @@ export default function InvoicesPage() {
   };
 
   const removeItem = (index) => {
-    setInvoiceForm((prev) => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index),
-    }));
+    setInvoiceForm((prev) => {
+      const items = prev.items.filter((_, i) => i !== index);
+      if (!prev.lineItemPaidEnabled) return { ...prev, items };
+      const totalPaid = items.reduce((sum, item) => sum + (Number(item.paidAmount) || 0), 0);
+      return { ...prev, items, paidAmount: totalPaid };
+    });
   };
 
   const loadSavedContent = (contentId) => {
@@ -536,6 +561,7 @@ export default function InvoicesPage() {
           items,
           taxCalculationMethod,
           lineItemDiscountEnabled: items.some((i) => (Number(i.discount) || 0) > 0),
+          lineItemPaidEnabled: items.some((i) => (Number(i.paidAmount) || 0) > 0),
           taxRate: templateTaxRate,
           discount: Number(content.discount) || 0,
           savedContent: contentId,
@@ -592,86 +618,122 @@ export default function InvoicesPage() {
 
   const handleSaveInvoice = async (e) => {
     e.preventDefault();
+  
     if (savedDraftInvoice) return;
+  
     setError('');
     setSaving(true);
+  
     try {
-    const filteredItems = invoiceForm.items.filter(
-      (item) => item.description && item.amount > 0,
-    ).map(item => {
-      const itemData = {
-        ...item,
-        discount: Number(item.discount) || 0,
-        paidAmount: item.paidAmount || 0,
-      };
-      
-      // Include tax fields based on tax calculation method
-      if (invoiceForm.taxCalculationMethod === 'product') {
-        itemData.taxRate = Number(item.taxRate) || 0;
-        const itemAmount = item.amount || 0;
-        itemData.taxAmount = (itemAmount * itemData.taxRate) / 100;
-      } else {
-        // For total-level tax, item tax fields should be 0
-        itemData.taxRate = 0;
-        itemData.taxAmount = 0;
+      // 🔹 Filter valid items
+      const filteredItems = invoiceForm.items
+        .filter((item) => item.description && Number(item.amount) > 0)
+        .map((item) => ({
+          description: item.description,
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+          amount: Number(item.amount) || 0,
+          discount: Number(item.discount) || 0,
+          taxRate: Number(item.taxRate) || 0,
+          paidAmount: invoiceForm.lineItemPaidEnabled
+            ? Number(item.paidAmount) || 0
+            : 0,
+        }));
+  
+      if (filteredItems.length === 0) {
+        setError('Please add at least one valid item.');
+        setSaving(false);
+        return;
       }
-      
-      return itemData;
-    });
-
-    const isEditing = !!editingInvoice?._id;
-    const itemDiscountSum = filteredItems.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
-    const invoiceDiscount = Number(invoiceForm.discount) || 0;
-
-    if (itemDiscountSum > invoiceDiscount) {
-      setError('Sum of item discounts cannot be greater than invoice discount.');
-      setSaving(false);
-      return;
-    }
-
-    const payload = {
-      invoiceNumber: invoiceForm.invoiceNumber.trim(),
-      invoiceDate: invoiceForm.invoiceDate || undefined,
-      dueDate: invoiceForm.dueDate || undefined,
-      status: isEditing ? invoiceForm.status : 'draft',
-      billTo: invoiceForm.billTo,
-      items: filteredItems,
-      taxCalculationMethod: invoiceForm.taxCalculationMethod || 'total',
-      taxRate: Number(invoiceForm.taxRate) || 0,
-      discount: invoiceDiscount,
-      paidAmount: filteredItems.reduce((sum, item) => sum + (Number(item.paidAmount) || 0), 0),
-      notes: invoiceForm.notes.trim() || undefined,
-      terms: invoiceForm.terms.trim() || undefined,
-      student: invoiceForm.student || undefined,
-      savedContent: invoiceForm.savedContent || undefined,
-    };
-
+  
+      const isEditing = !!editingInvoice?._id;
+  
+      // 🔹 Validate discount
+      const itemDiscountSum = filteredItems.reduce(
+        (sum, item) => sum + (Number(item.discount) || 0),
+        0
+      );
+  
+      const invoiceDiscount = Number(invoiceForm.discount) || 0;
+  
+      if (itemDiscountSum > invoiceDiscount) {
+        setError(
+          'Sum of item discounts cannot be greater than invoice discount.'
+        );
+        setSaving(false);
+        return;
+      }
+  
+      // 🔹 Prepare payload (NO heavy calculations)
+      const payload = {
+        invoiceNumber: invoiceForm.invoiceNumber?.trim(),
+        invoiceDate: invoiceForm.invoiceDate || undefined,
+        dueDate: invoiceForm.dueDate || undefined,
+        status: isEditing ? invoiceForm.status : 'draft',
+  
+        billTo: invoiceForm.billTo,
+  
+        items: filteredItems,
+  
+        taxCalculationMethod:
+          invoiceForm.taxCalculationMethod || 'total',
+  
+        taxRate: Number(invoiceForm.taxRate) || 0,
+  
+        discount: invoiceDiscount,
+  
+        // 🔹 Payment
+        paidAmount: invoiceForm.lineItemPaidEnabled
+          ? undefined // backend will derive
+          : Number(invoiceForm.paidAmount) || 0,
+  
+        notes: invoiceForm.notes?.trim() || undefined,
+        terms: invoiceForm.terms?.trim() || undefined,
+        student: invoiceForm.student || undefined,
+        savedContent: invoiceForm.savedContent || undefined,
+      };
+  
+      // 🔹 API Call
       if (isEditing && editingInvoice?._id) {
         await api.put(
           `${INVOICE_BASE}/${editingInvoice._id}`,
           payload,
           {},
-          true,
+          true
         );
+  
         showSuccess('Invoice updated successfully.');
       } else {
-        const response = await api.post(`${INVOICE_BASE}`, payload, {}, true);
+        const response = await api.post(
+          `${INVOICE_BASE}`,
+          payload,
+          {},
+          true
+        );
+  
         const created = response?.data || response || {};
         const createdId = created._id || created.id;
+  
         showSuccess('Invoice saved as draft.');
+  
         if (createdId) {
           setSavedDraftInvoice({
             _id: createdId,
-            invoiceNumber: payload.invoiceNumber || created.invoiceNumber,
+            invoiceNumber:
+              payload.invoiceNumber || created.invoiceNumber,
             billTo: payload.billTo || created.billTo,
             status: 'draft',
             ...created,
           });
+  
           setInvoiceFormStep(3);
+  
           await fetchInvoices();
           return;
         }
       }
+  
+      // 🔹 Reset
       resetForm();
       await fetchInvoices();
     } catch (err) {
@@ -711,6 +773,7 @@ export default function InvoicesPage() {
       })),
       taxCalculationMethod: invoice.taxCalculationMethod || 'total',
       lineItemDiscountEnabled: (invoice.items || []).some((item) => (Number(item.discount) || 0) > 0),
+      lineItemPaidEnabled: (invoice.items || []).some((item) => (Number(item.paidAmount) || 0) > 0),
       taxRate: invoice.taxRate || 0,
       discount: invoice.discount || 0,
       paidAmount: invoice.paidAmount || 0,
@@ -770,6 +833,7 @@ export default function InvoicesPage() {
         status: 'cancelled',
         billTo: full.billTo || {},
         items: full.items || [],
+        taxCalculationMethod: full.taxCalculationMethod || 'total',
         taxRate: full.taxRate ?? 0,
         discount: full.discount ?? 0,
         paidAmount: full.paidAmount ?? 0,
@@ -886,6 +950,7 @@ export default function InvoicesPage() {
         status: 'sent',
         billTo: full.billTo || {},
         items: full.items || [],
+        taxCalculationMethod: full.taxCalculationMethod || 'total',
         taxRate: full.taxRate ?? 0,
         discount: full.discount ?? 0,
         paidAmount: full.paidAmount ?? 0,
@@ -1229,6 +1294,39 @@ export default function InvoicesPage() {
       return { ...prev, discount: itemDiscountSum };
     });
   }, [invoiceForm.lineItemDiscountEnabled, invoiceForm.items]);
+
+  useEffect(() => {
+    if (!invoiceForm.lineItemPaidEnabled) return;
+    const itemPaidSum = invoiceForm.items.reduce(
+      (sum, item) => sum + (Number(item.paidAmount) || 0),
+      0,
+    );
+    setInvoiceForm((prev) => {
+      const prevPaid = Number(prev.paidAmount) || 0;
+      if (Math.abs(prevPaid - itemPaidSum) < 0.01) return prev;
+      return { ...prev, paidAmount: itemPaidSum };
+    });
+  }, [invoiceForm.lineItemPaidEnabled, invoiceForm.items]);
+
+  const lineItemDescSpan = useMemo(() => {
+    const d = invoiceForm.lineItemDiscountEnabled ? 2 : 0;
+    const t = invoiceForm.taxCalculationMethod === 'product' ? 1 : 0;
+    const p = invoiceForm.lineItemPaidEnabled ? 1 : 0;
+    return Math.max(2, 12 - 6 - d - t - p);
+  }, [
+    invoiceForm.lineItemDiscountEnabled,
+    invoiceForm.taxCalculationMethod,
+    invoiceForm.lineItemPaidEnabled,
+  ]);
+
+  const lineItemDescColClass =
+    lineItemDescSpan <= 2
+      ? 'col-span-2'
+      : lineItemDescSpan === 3
+        ? 'col-span-3'
+        : lineItemDescSpan === 4
+          ? 'col-span-4'
+          : 'col-span-5';
 
   // Define columns for Invoices DataTable
   const invoiceColumns = useMemo(() => [
@@ -1973,19 +2071,30 @@ export default function InvoicesPage() {
                     <Checkbox
                       checked={invoiceForm.taxCalculationMethod === 'product'}
                       onCheckedChange={(checked) =>
-                        setInvoiceForm((prev) => ({
-                          ...prev,
-                          taxCalculationMethod: checked ? 'product' : 'total',
-                          items: prev.items.map((item) => {
+                        setInvoiceForm((prev) => {
+                          const items = (prev.items || []).map((item) => {
                             const amount = Number(item.amount) || 0;
-                            const nextRate = checked ? (Number(item.taxRate) || Number(prev.taxRate) || 0) : 0;
-                            return {
+                            const nextRate = checked
+                              ? Number(item.taxRate) || Number(prev.taxRate) || 0
+                              : 0;
+                            const taxAmount = checked ? (amount * nextRate) / 100 : 0;
+                            const next = {
                               ...item,
                               taxRate: nextRate,
-                              taxAmount: checked ? (amount * nextRate) / 100 : 0,
+                              taxAmount,
                             };
-                          }),
-                        }))
+                            return prev.lineItemPaidEnabled ? capItemPaidToPayable(next) : next;
+                          });
+                          const paidAmount = prev.lineItemPaidEnabled
+                            ? items.reduce((sum, i) => sum + (Number(i.paidAmount) || 0), 0)
+                            : prev.paidAmount;
+                          return {
+                            ...prev,
+                            taxCalculationMethod: checked ? 'product' : 'total',
+                            items,
+                            paidAmount,
+                          };
+                        })
                       }
                     />
                     Product-level tax
@@ -1994,20 +2103,63 @@ export default function InvoicesPage() {
                     <Checkbox
                       checked={!!invoiceForm.lineItemDiscountEnabled}
                       onCheckedChange={(checked) =>
-                        setInvoiceForm((prev) => ({
-                          ...prev,
-                          lineItemDiscountEnabled: !!checked,
-                          items: (prev.items || []).map((item) => ({
+                        setInvoiceForm((prev) => {
+                          let items = (prev.items || []).map((item) => ({
                             ...item,
-                            discount: checked ? (Number(item.discount) || 0) : 0,
-                          })),
-                          discount: checked
-                            ? (prev.items || []).reduce((sum, item) => sum + (Number(item.discount) || 0), 0)
-                            : 0,
-                        }))
+                            discount: checked ? Number(item.discount) || 0 : 0,
+                          }));
+                          if (prev.lineItemPaidEnabled) {
+                            items = items.map((item) => capItemPaidToPayable(item));
+                          }
+                          const itemDiscountSum = items.reduce(
+                            (sum, item) => sum + (Number(item.discount) || 0),
+                            0,
+                          );
+                          const paidAmount = prev.lineItemPaidEnabled
+                            ? items.reduce((sum, i) => sum + (Number(i.paidAmount) || 0), 0)
+                            : prev.paidAmount;
+                          return {
+                            ...prev,
+                            lineItemDiscountEnabled: !!checked,
+                            items,
+                            discount: checked ? itemDiscountSum : 0,
+                            paidAmount,
+                          };
+                        })
                       }
                     />
                     Product-level discount
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      checked={!!invoiceForm.lineItemPaidEnabled}
+                      onCheckedChange={(checked) =>
+                        setInvoiceForm((prev) => {
+                          if (!checked) {
+                            const rolledUp = (prev.items || []).reduce(
+                              (sum, item) => sum + (Number(item.paidAmount) || 0),
+                              0,
+                            );
+                            return {
+                              ...prev,
+                              lineItemPaidEnabled: false,
+                              items: (prev.items || []).map((item) => ({ ...item, paidAmount: 0 })),
+                              paidAmount: prev.lineItemPaidEnabled ? rolledUp : prev.paidAmount,
+                            };
+                          }
+                          const itemPaidSum = (prev.items || []).reduce(
+                            (sum, item) => sum + (Number(item.paidAmount) || 0),
+                            0,
+                          );
+                          return {
+                            ...prev,
+                            lineItemPaidEnabled: true,
+                            paidAmount: itemPaidSum,
+                          };
+                        })
+                      }
+                    />
+                    Product-level paid
                   </label>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={addItem}>
@@ -2018,12 +2170,13 @@ export default function InvoicesPage() {
               <div className="p-4 space-y-2">
               {invoiceForm.items.length > 0 && (
                 <div className="grid grid-cols-12 gap-1 px-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  <div className={invoiceForm.taxCalculationMethod === 'product' || invoiceForm.lineItemDiscountEnabled ? 'col-span-3' : 'col-span-5'}>Description</div>
+                  <div className={lineItemDescColClass}>Description</div>
                   <div className="col-span-1 text-right">Qty</div>
-                  <div className="col-span-2 text-right">Unit</div>
-                  <div className="col-span-2 text-right">Amount</div>
+                  <div className="col-span-2 text-right">Cost / Fee (₹)</div>
+                  <div className="col-span-2 text-right">Total (₹)</div>
                   {invoiceForm.lineItemDiscountEnabled && <div className="col-span-2 text-right">Discount</div>}
                   {invoiceForm.taxCalculationMethod === 'product' && <div className="col-span-1 text-right">Tax %</div>}
+                  {invoiceForm.lineItemPaidEnabled && <div className="col-span-1 text-right">Paid</div>}
                   <div className="col-span-1" />
                 </div>
               )}
@@ -2032,7 +2185,7 @@ export default function InvoicesPage() {
                   key={index}
                   className="grid grid-cols-12 gap-1 items-center p-2 border border-border rounded-lg bg-background/50"
                 >
-                  <div className={invoiceForm.taxCalculationMethod === 'product' || invoiceForm.lineItemDiscountEnabled ? 'col-span-3' : 'col-span-5'}>
+                  <div className={lineItemDescColClass}>
                     <Input
                       value={item.description}
                       onChange={(e) =>
@@ -2110,6 +2263,25 @@ export default function InvoicesPage() {
                           handleItemChange(index, 'taxRate', Number(e.target.value))
                         }
                         placeholder="0.00"
+                        className="h-9"
+                      />
+                    </div>
+                  )}
+                  {invoiceForm.lineItemPaidEnabled && (
+                    <div className="col-span-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.paidAmount ?? 0}
+                        onChange={(e) =>
+                          handleItemChange(
+                            index,
+                            'paidAmount',
+                            Number(e.target.value),
+                          )
+                        }
+                        title="Paid for this line (max = line total after discount & tax)"
                         className="h-9"
                       />
                     </div>
@@ -2200,8 +2372,14 @@ export default function InvoicesPage() {
                           step="0.01"
                           value={invoiceForm.paidAmount}
                           onChange={handleFormChange}
+                          readOnly={!!invoiceForm.lineItemPaidEnabled}
                           className="h-10"
                         />
+                        {invoiceForm.lineItemPaidEnabled ? (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Auto-calculated from line paid amounts.
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </div>
