@@ -620,13 +620,13 @@ function buildPrintHtml({ expense, expenseId, category, account, college, vouche
   <!-- SIGNATURES -->
   <div class="sig-row">
   <br>
-    <div class="sig-cell"><div class="sig-line-rule">Prepared By</div></div>
+    <div class="sig-cell"><div class="sig-line-rule">Prepared By: ${escapeHtml(expense.createdBy.name)}</div></div>
     <br>
     <div class="sig-cell"><div class="sig-line-rule">Verified By</div></div>
     <br>
-    <div class="sig-cell"><div class="sig-line-rule">Signature of Recipient</div></div>
+    <div class="sig-cell"><div class="sig-line-rule">Signature of Payee</div></div>
     <br>
-    <div class="sig-cell"><div class="sig-line-rule">Principal / Chairman<br>Treasurer</div></div>
+    <div class="sig-cell"><div class="sig-line-rule">Authorized Signatory</div></div>
   </div>
 
   <!-- FOOTER -->

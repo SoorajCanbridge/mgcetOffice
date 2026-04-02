@@ -2364,7 +2364,8 @@ export default function InvoicesPage() {
                         ) : null}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium mb-1.5">Paid (₹)</label>
+                        <label className="block text-sm font-medium mb-1.5">Already Paid (₹)</label>
+                        <p style={{fontSize: '10px'}} className=" text-muted-foreground mt-1">This amount will be not recorded in the payment history.</p>
                         <Input
                           name="paidAmount"
                           type="number"
