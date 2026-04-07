@@ -8,7 +8,7 @@ import {
   BarChart3,
   ArrowLeft,
   Calendar,
-  Download,
+  Printer,
   RefreshCcw,
   TrendingUp,
   TrendingDown,
@@ -34,6 +34,23 @@ const getDefaultRange = () => {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   return { startDate: start.toISOString().split('T')[0], endDate: now.toISOString().split('T')[0] };
 };
+
+const formatDate = (value) => {
+  if (!value) return '-';
+  try {
+    return new Date(value).toISOString().split('T')[0];
+  } catch {
+    return String(value);
+  }
+};
+
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 export default function FinanceTrackingReportsPage() {
   const { user } = useAuth();
@@ -94,34 +111,199 @@ export default function FinanceTrackingReportsPage() {
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }, [expenses]);
 
-  const exportFullCsv = () => {
-    const headers = ['Type', 'Title', 'Amount', 'Date', 'Category', 'Account', 'Reference'];
-    const incomeRows = incomes.map((i) => [
-      'Income',
-      i.title || '',
-      i.amount ?? '',
-      i.date ? new Date(i.date).toISOString().split('T')[0] : '',
-      (i.category && (typeof i.category === 'object' ? i.category.name : i.category)) || '',
-      (i.account && (typeof i.account === 'object' ? i.account.name : i.account)) || '',
-      i.referenceNumber || '',
-    ]);
-    const expenseRows = expenses.map((i) => [
-      'Expense',
-      i.title || '',
-      i.amount ?? '',
-      i.date ? new Date(i.date).toISOString().split('T')[0] : '',
-      (i.category && (typeof i.category === 'object' ? i.category.name : i.category)) || '',
-      (i.account && (typeof i.account === 'object' ? i.account.name : i.account)) || '',
-      i.referenceNumber || '',
-    ]);
-    const rows = [...incomeRows, ...expenseRows];
-    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c)}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `finance-report-${dateRange.startDate}-to-${dateRange.endDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+  const printFullReport = () => {
+    const generatedAt = new Date();
+    const periodText = `${dateRange.startDate || '-'} to ${dateRange.endDate || '-'}`;
+
+    const incomeRowsHtml = incomes
+      .map((i, idx) => {
+        const category = (i.category && (typeof i.category === 'object' ? i.category.name : i.category)) || 'Uncategorized';
+        const account = (i.account && (typeof i.account === 'object' ? i.account.name : i.account)) || '-';
+        return `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(i.title || 'Untitled')}</td>
+            <td>${escapeHtml(formatDate(i.date))}</td>
+            <td>${escapeHtml(category)}</td>
+            <td>${escapeHtml(account)}</td>
+            <td>${escapeHtml(i.referenceNumber || '-')}</td>
+            <td class="amount income">${escapeHtml(formatCurrency(i.amount))}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const expenseRowsHtml = expenses
+      .map((i, idx) => {
+        const category = (i.category && (typeof i.category === 'object' ? i.category.name : i.category)) || 'Uncategorized';
+        const account = (i.account && (typeof i.account === 'object' ? i.account.name : i.account)) || '-';
+        return `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(i.title || 'Untitled')}</td>
+            <td>${escapeHtml(formatDate(i.date))}</td>
+            <td>${escapeHtml(category)}</td>
+            <td>${escapeHtml(account)}</td>
+            <td>${escapeHtml(i.referenceNumber || '-')}</td>
+            <td class="amount expense">${escapeHtml(formatCurrency(i.amount))}</td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const incomeByCategoryHtml = incomeByCategory
+      .map(([name, amount]) => `<tr><td>${escapeHtml(name)}</td><td class="amount income">${escapeHtml(formatCurrency(amount))}</td></tr>`)
+      .join('');
+
+    const expenseByCategoryHtml = expenseByCategory
+      .map(([name, amount]) => `<tr><td>${escapeHtml(name)}</td><td class="amount expense">${escapeHtml(formatCurrency(amount))}</td></tr>`)
+      .join('');
+
+    const reportHtml = `
+      <!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Finance Report ${escapeHtml(periodText)}</title>
+        <style>
+          @page { size: A4; margin: 14mm; }
+          body { font-family: Arial, sans-serif; color: #111827; margin: 0; }
+          h1, h2, h3, p { margin: 0; }
+          .header { margin-bottom: 16px; }
+          .muted { color: #6b7280; font-size: 12px; margin-top: 4px; }
+          .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0; }
+          .card { border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; }
+          .label { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+          .value { font-size: 18px; font-weight: 700; }
+          .income { color: #047857; }
+          .expense { color: #b91c1c; }
+          .section { margin-top: 16px; }
+          .section h2 { font-size: 15px; margin-bottom: 8px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #d1d5db; padding: 6px 8px; font-size: 12px; vertical-align: top; text-align: left; }
+          th { background: #f3f4f6; font-weight: 600; }
+          .amount { text-align: right; font-weight: 700; white-space: nowrap; }
+          .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+          .empty { color: #6b7280; font-style: italic; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Finance Report</h1>
+          <p class="muted">Period: ${escapeHtml(periodText)}</p>
+          <p class="muted">Generated: ${escapeHtml(generatedAt.toLocaleString('en-IN'))}</p>
+        </div>
+
+        <div class="summary">
+          <div class="card">
+            <div class="label">Total Income (${summary?.totalIncomeCount ?? 0} records)</div>
+            <div class="value income">${escapeHtml(formatCurrency(summary?.totalIncome))}</div>
+          </div>
+          <div class="card">
+            <div class="label">Total Expense (${summary?.totalExpenseCount ?? 0} records)</div>
+            <div class="value expense">${escapeHtml(formatCurrency(summary?.totalExpense))}</div>
+          </div>
+          <div class="card">
+            <div class="label">Net Position</div>
+            <div class="value ${(summary?.net ?? 0) >= 0 ? 'income' : 'expense'}">${escapeHtml(formatCurrency(summary?.net))}</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Category Breakdown</h2>
+          <div class="split">
+            <div>
+              <h3 style="font-size:13px; margin-bottom:6px;">Income by Category</h3>
+              ${
+                incomeByCategory.length
+                  ? `<table><thead><tr><th>Category</th><th class="amount">Amount</th></tr></thead><tbody>${incomeByCategoryHtml}</tbody></table>`
+                  : '<p class="empty">No income records in this period.</p>'
+              }
+            </div>
+            <div>
+              <h3 style="font-size:13px; margin-bottom:6px;">Expense by Category</h3>
+              ${
+                expenseByCategory.length
+                  ? `<table><thead><tr><th>Category</th><th class="amount">Amount</th></tr></thead><tbody>${expenseByCategoryHtml}</tbody></table>`
+                  : '<p class="empty">No expense records in this period.</p>'
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Income Records (${incomes.length})</h2>
+          ${
+            incomes.length
+              ? `<table>
+                  <thead>
+                    <tr><th>#</th><th>Title</th><th>Date</th><th>Category</th><th>Account</th><th>Reference</th><th class="amount">Amount</th></tr>
+                  </thead>
+                  <tbody>${incomeRowsHtml}</tbody>
+                </table>`
+              : '<p class="empty">No income records found.</p>'
+          }
+        </div>
+
+        <div class="section">
+          <h2>Expense Records (${expenses.length})</h2>
+          ${
+            expenses.length
+              ? `<table>
+                  <thead>
+                    <tr><th>#</th><th>Title</th><th>Date</th><th>Category</th><th>Account</th><th>Reference</th><th class="amount">Amount</th></tr>
+                  </thead>
+                  <tbody>${expenseRowsHtml}</tbody>
+                </table>`
+              : '<p class="empty">No expense records found.</p>'
+          }
+        </div>
+      </body>
+      </html>
+    `;
+
+    const existingFrame = document.getElementById('finance-report-print-frame');
+    if (existingFrame) existingFrame.remove();
+
+    const printFrame = document.createElement('iframe');
+    printFrame.id = 'finance-report-print-frame';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentWindow?.document;
+    if (!frameDoc || !printFrame.contentWindow) {
+      setError('Unable to create print document. Please try again.');
+      printFrame.remove();
+      return;
+    }
+
+    frameDoc.open();
+    frameDoc.write(reportHtml);
+    frameDoc.close();
+
+    const triggerPrint = () => {
+      try {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+      } finally {
+        setTimeout(() => {
+          const node = document.getElementById('finance-report-print-frame');
+          if (node) node.remove();
+        }, 1000);
+      }
+    };
+
+    if (frameDoc.readyState === 'complete') {
+      triggerPrint();
+    } else {
+      printFrame.onload = triggerPrint;
+    }
   };
 
   return (
@@ -152,9 +334,9 @@ export default function FinanceTrackingReportsPage() {
             <RefreshCcw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          <Button size="sm" onClick={exportFullCsv} disabled={loading}>
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
+          <Button size="sm" onClick={printFullReport} disabled={loading}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print Report
           </Button>
         </div>
       </div>

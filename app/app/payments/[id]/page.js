@@ -5,11 +5,18 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   CreditCard, ArrowLeft, Download, Printer, Mail, Phone, MapPin,
   RefreshCcw, Edit2, DollarSign, CheckCircle, XCircle,
-  Clock, FileText, Package,
+  Clock, FileText, Package, Copy,
 } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 import { getLogoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 
 const PAYMENTS_BASE = '/finance/payments';
 
@@ -76,6 +83,8 @@ const RECEIPT_PRINT_STYLES = `
     margin: 0 auto;
     padding: 8px 6px 12px;
   }
+  .pr-copy { margin-bottom: 10px; }
+  .pr-copy + .pr-copy { page-break-before: always; break-before: page; }
   .pr-sheet {
     background: #fff;
     border-radius: 10px;
@@ -136,6 +145,15 @@ const RECEIPT_PRINT_STYLES = `
   .pr-chip-k { font-weight: 600; color: var(--pr-muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
   .pr-chip-v { font-weight: 600; color: var(--pr-ink); }
   .pr-body { padding: 10px 12px 10px; }
+  .pr-title-center {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pr-ink);
+    margin: 0 0 10px;
+  }
   .pr-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -290,6 +308,8 @@ export default function PaymentDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [printDrawerOpen, setPrintDrawerOpen] = useState(false);
+  const [pendingPrintTitle, setPendingPrintTitle] = useState('Payment Receipt');
 
   const collegeLogoUrl = useMemo(() => {
     if (!college?.logo) return '';
@@ -557,6 +577,7 @@ export default function PaymentDetailsPage() {
 
     const invLineItems = Array.isArray(invoice?.items) ? invoice.items : [];
     const invProductTax = invoice?.taxCalculationMethod === 'product';
+    const showInvQtyUnitPrice = invLineItems.some((item) => Number(item?.quantity ?? 0) !== 1);
     const invoiceLineItemsHtml =
       invoice && invLineItems.length > 0
         ? `<div class="pr-block">
@@ -564,8 +585,8 @@ export default function PaymentDetailsPage() {
           <table class="pr-data-table pr-data-table--wide">
             <thead><tr>
               <th>Description</th>
-              <th class="num">Qty</th>
-              <th class="num">Unit price</th>
+              ${showInvQtyUnitPrice ? '<th class="num">Qty</th>' : ''}
+              ${showInvQtyUnitPrice ? '<th class="num">Unit price</th>' : ''}
               <th class="num">Amount</th>
               ${invProductTax ? '<th class="num">Tax %</th><th class="num">Tax</th>' : ''}
               <th class="num">Paid</th>
@@ -581,8 +602,8 @@ export default function PaymentDetailsPage() {
                   : '';
                 return `<tr>
                 <td>${esc(item.description || '—')}</td>
-                <td class="num">${esc(String(item.quantity ?? 0))}</td>
-                <td class="num">${formatCurrency(item.unitPrice || 0)}</td>
+                ${showInvQtyUnitPrice ? `<td class="num">${esc(String(item.quantity ?? 0))}</td>` : ''}
+                ${showInvQtyUnitPrice ? `<td class="num">${formatCurrency(item.unitPrice || 0)}</td>` : ''}
                 <td class="num">${formatCurrency(itemAmount)}</td>
                 ${taxCells}
                 <td class="num">${formatCurrency(itemPaid)}</td>
@@ -615,6 +636,7 @@ export default function PaymentDetailsPage() {
         </header>
         ${stripChips ? `<div class="pr-strip">${stripChips}</div>` : ''}
         <div class="pr-body">
+          <div class="pr-title-center">Payment Receipt</div>
           <div class="pr-grid">
             <section class="pr-panel">
               <div class="pr-panel-h">Received from</div>
@@ -662,24 +684,42 @@ export default function PaymentDetailsPage() {
     splitTotalMismatch,
   ]);
 
-  const openPrintWindow = useCallback((title) => {
+  const openPrintWindow = useCallback((title, copies = 1) => {
     if (!payment) return;
     const w = window.open('', '_blank');
     if (!w) { alert('Please allow popups to continue'); return; }
+    const bodyHtml = getPrintBodyHtml();
+    const safeCopies = Math.max(1, Number(copies) || 1);
+    const copiesHtml = Array.from({ length: safeCopies })
+      .map(() => `<div class="pr-copy">${bodyHtml}</div>`)
+      .join('');
     w.document.write(
       `<!DOCTYPE html><html><head><meta charset="utf-8">` +
         `<link rel="preconnect" href="https://fonts.googleapis.com">` +
         `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
         `<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">` +
         `<title>${title} - ${(payment.paymentNumber || '').replace(/</g, '&lt;')}</title>` +
-        `<style>${RECEIPT_PRINT_STYLES}</style></head><body><div class="print-container">${getPrintBodyHtml()}</div></body></html>`
+        `<style>${RECEIPT_PRINT_STYLES}</style></head><body><div class="print-container">${copiesHtml}</div></body></html>`
     );
     w.document.close();
     setTimeout(() => w.print(), 300);
   }, [payment, getPrintBodyHtml]);
 
-  const handlePrint = useCallback(() => openPrintWindow('Payment Receipt'), [openPrintWindow]);
-  const handleExportPDF = useCallback(() => openPrintWindow('Payment Receipt PDF'), [openPrintWindow]);
+  const startPrintFlow = useCallback((title) => {
+    setPendingPrintTitle(title);
+    setPrintDrawerOpen(true);
+  }, []);
+
+  const printWithCopies = useCallback(
+    (copies) => {
+      setPrintDrawerOpen(false);
+      openPrintWindow(pendingPrintTitle, copies);
+    },
+    [openPrintWindow, pendingPrintTitle]
+  );
+
+  const handlePrint = useCallback(() => startPrintFlow('Payment Receipt'), [startPrintFlow]);
+  const handleExportPDF = useCallback(() => startPrintFlow('Payment Receipt PDF'), [startPrintFlow]);
 
   const statusConfig = {
     completed: { color: 'text-emerald-700 bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle, label: 'Completed' },
@@ -721,6 +761,7 @@ export default function PaymentDetailsPage() {
   const invBalance = invoice?.balanceAmount ?? (invTotal != null ? invTotal - invPaid : null);
   const invProductTax = invoice?.taxCalculationMethod === 'product';
   const invLineItems = Array.isArray(invoice?.items) ? invoice.items : [];
+  const showInvQtyUnitPrice = invLineItems.some((item) => Number(item?.quantity ?? 0) !== 1);
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -914,8 +955,12 @@ export default function PaymentDetailsPage() {
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100">
                         <th className="py-2.5 px-4 text-left text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase">Description</th>
-                        <th className="py-2.5 px-4 text-right text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase whitespace-nowrap">Qty</th>
-                        <th className="py-2.5 px-4 text-right text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase whitespace-nowrap">Unit price</th>
+                        {showInvQtyUnitPrice && (
+                          <th className="py-2.5 px-4 text-right text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase whitespace-nowrap">Qty</th>
+                        )}
+                        {showInvQtyUnitPrice && (
+                          <th className="py-2.5 px-4 text-right text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase whitespace-nowrap">Unit price</th>
+                        )}
                         <th className="py-2.5 px-4 text-right text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase whitespace-nowrap">Amount</th>
                         {invProductTax && (
                           <>
@@ -935,8 +980,12 @@ export default function PaymentDetailsPage() {
                         return (
                           <tr key={item._id || index} className="border-b border-slate-50 last:border-0">
                             <td className="py-3 px-4 font-medium text-slate-800 align-top">{item.description || '—'}</td>
-                            <td className="py-3 px-4 text-right text-slate-600 tabular-nums">{item.quantity ?? 0}</td>
-                            <td className="py-3 px-4 text-right text-slate-600 tabular-nums">{formatCurrency(item.unitPrice || 0)}</td>
+                            {showInvQtyUnitPrice && (
+                              <td className="py-3 px-4 text-right text-slate-600 tabular-nums">{item.quantity ?? 0}</td>
+                            )}
+                            {showInvQtyUnitPrice && (
+                              <td className="py-3 px-4 text-right text-slate-600 tabular-nums">{formatCurrency(item.unitPrice || 0)}</td>
+                            )}
                             <td className="py-3 px-4 text-right font-semibold text-slate-800 tabular-nums">{formatCurrency(itemAmount)}</td>
                             {invProductTax && (
                               <>
@@ -1165,6 +1214,47 @@ export default function PaymentDetailsPage() {
           </div>
         ))}
       </div>
+
+      <Sheet open={printDrawerOpen} onOpenChange={setPrintDrawerOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Select Print Copies</SheetTitle>
+            <SheetDescription>Choose whether you need 1 page or 2 pages before printing.</SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-3">
+            <button
+              type="button"
+              onClick={() => printWithCopies(1)}
+              className="w-full rounded-xl border border-slate-200 p-4 text-left hover:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-lg border border-slate-200 bg-white flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-slate-700" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">1 Page</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Print a single copy of this payment receipt.</p>
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => printWithCopies(2)}
+              className="w-full rounded-xl border border-slate-200 p-4 text-left hover:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-lg border border-slate-200 bg-white flex items-center justify-center">
+                  <Copy className="h-5 w-5 text-slate-700" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">2 Pages</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Print two copies in one print job.</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

@@ -425,25 +425,34 @@ function buildPrintHtml({ expense, expenseId, category, account, college, vouche
     /* ── Signatures ──────────────────────────────── */
     .sig-row {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      border-bottom: 1px solid var(--rule);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      width: 100%;
+      margin: 8px 0 2px;
     }
     .sig-cell {
-      padding: 10px 16px 14px;
-      min-height: 72px;
+      border: 1px solid var(--rule);
+      border-radius: 3px;
+      padding: 10px 12px 10px;
+      min-height: 96px;
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
+      background: #fff;
     }
-    .sig-cell + .sig-cell { border-left: 1px solid var(--rule); }
+    .sig-space {
+      flex: 1;
+      min-height: 50px;
+    }
     .sig-line-rule {
       border-top: 1px solid var(--ink-3);
-      padding-top: 5px;
+      padding-top: 6px;
       font-size: 9px;
       font-weight: 600;
       letter-spacing: 0.04em;
       color: var(--ink-3);
       line-height: 1.4;
+      min-height: 22px;
     }
 
     /* ── Footer ──────────────────────────────────── */
@@ -619,14 +628,22 @@ function buildPrintHtml({ expense, expenseId, category, account, college, vouche
 
   <!-- SIGNATURES -->
   <div class="sig-row">
-  <br>
-    <div class="sig-cell"><div class="sig-line-rule">Prepared By: ${escapeHtml(expense.createdBy.name)}</div></div>
-    <br>
-    <div class="sig-cell"><div class="sig-line-rule">Verified By</div></div>
-    <br>
-    <div class="sig-cell"><div class="sig-line-rule">Signature of Payee</div></div>
-    <br>
-    <div class="sig-cell"><div class="sig-line-rule">Authorized Signatory</div></div>
+    <div class="sig-cell">
+      <div class="sig-space"></div>
+      <div class="sig-line-rule">Prepared By: ${escapeHtml(expense?.createdBy?.name || '-')}</div>
+    </div>
+    <div class="sig-cell">
+      <div class="sig-space"></div>
+      <div class="sig-line-rule">Name & Signature of Payee</div>
+    </div>
+    <div class="sig-cell">
+      <div class="sig-space"></div>
+      <div class="sig-line-rule">Verified By A.O / HOD</div>
+    </div>
+    <div class="sig-cell">
+      <div class="sig-space"></div>
+      <div class="sig-line-rule">Passes By: Principal / Chairman / General Secretary / Treasurer</div>
+    </div>
   </div>
 
   <!-- FOOTER -->

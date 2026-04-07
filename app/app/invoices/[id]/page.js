@@ -320,6 +320,11 @@ export default function InvoiceDetailsPage() {
     [invoice?.items]
   );
 
+  const showQuantityAndUnitPrice = useMemo(
+    () => (invoice?.items || []).some((item) => Number(item.quantity || 0) !== 1),
+    [invoice?.items]
+  );
+
   const getPrintBodyHtml = useCallback(() => {
     if (!invoice) return '';
     const statusClass = invoice.status === 'paid' ? 'paid' : invoice.status === 'overdue' ? 'overdue' : invoice.status === 'sent' ? 'sent' : invoice.status === 'pending' ? 'pending' : 'draft';
@@ -345,8 +350,8 @@ export default function InvoiceDetailsPage() {
         : '';
       rows += `<tr>
         <td>${(item.description || '-').replace(/</g, '&lt;')}</td>
-        <td class="tr-right">${item.quantity || 0}</td>
-        <td class="tr-right">${formatCurrency(item.unitPrice || 0)}</td>
+        ${showQuantityAndUnitPrice ? `<td class="tr-right">${item.quantity || 0}</td>` : ''}
+        ${showQuantityAndUnitPrice ? `<td class="tr-right">${formatCurrency(item.unitPrice || 0)}</td>` : ''}
         <td class="tr-right">${formatCurrency(itemAmount)}</td>
         ${discountCol}
         ${taxCols}
@@ -401,9 +406,9 @@ export default function InvoiceDetailsPage() {
         <thead>
           <tr>
             <th>Description</th>
-            <th class="tr-right">Qty</th>
-            <th class="tr-right">Unit Price</th>
-            <th class="tr-right">Amount</th>
+            ${showQuantityAndUnitPrice ? '<th class="tr-right">Qty</th>' : ''}
+            ${showQuantityAndUnitPrice ? '<th class="tr-right">Unit Price</th>' : ''}
+            <th class="tr-right">Total (₹)</th>
             ${discountHeader}
             ${taxHeader}
             <th class="tr-right">Paid</th>
@@ -432,7 +437,7 @@ export default function InvoiceDetailsPage() {
         <p style="margin-top:6px">Generated on ${formatDateForDisplay(new Date())}</p>
       </div>
     `;
-  }, [invoice, college, collegeLogoUrl, student, account, totals, getItemTotalWithTax, hasItemDiscount]);
+  }, [invoice, college, collegeLogoUrl, student, account, totals, getItemTotalWithTax, hasItemDiscount, showQuantityAndUnitPrice]);
 
   // Export to CSV
   const handleExportCSV = useCallback(() => {
@@ -856,12 +861,16 @@ export default function InvoiceDetailsPage() {
                   <th className="text-left p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Description
                   </th>
-                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Quantity
-                  </th>
-                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Cost/Fee (₹)
-                  </th>
+                  {showQuantityAndUnitPrice && (
+                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Quantity
+                    </th>
+                  )}
+                  {showQuantityAndUnitPrice && (
+                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Cost/Fee (₹)
+                    </th>
+                  )}
                   <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                     Total (₹)
                   </th>
@@ -898,8 +907,12 @@ export default function InvoiceDetailsPage() {
                   return (
                     <tr key={index} className="border-b border-border hover:bg-muted/50">
                       <td className="p-2 text-sm font-medium">{item.description || '-'}</td>
-                      <td className="p-2 text-sm text-right">{item.quantity || 0}</td>
-                      <td className="p-2 text-sm text-right">{formatCurrency(item.unitPrice || 0)}</td>
+                      {showQuantityAndUnitPrice && (
+                        <td className="p-2 text-sm text-right">{item.quantity || 0}</td>
+                      )}
+                      {showQuantityAndUnitPrice && (
+                        <td className="p-2 text-sm text-right">{formatCurrency(item.unitPrice || 0)}</td>
+                      )}
                       <td className="p-2 text-sm text-right font-semibold">
                         {formatCurrency(itemAmount)}
                       </td>

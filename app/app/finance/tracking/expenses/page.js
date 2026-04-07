@@ -20,6 +20,9 @@ import {
   Download,
   Filter,
   FileText,
+  Repeat,
+  Trash2,
+  CreditCard,
 } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 import { getUploadedImageUrl } from '@/lib/utils';
@@ -39,6 +42,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import RecurringExpenseModal from '@/components/RecurringExpenseModal';
+import PayRecurringExpenseModal from '@/components/PayRecurringExpenseModal';
 
 const FINANCE_BASE = '/finance';
 
@@ -58,6 +63,18 @@ const formatCurrency = (value) => {
   } catch {
     return String(value);
   }
+};
+
+const getRecurringStatusLabel = (status) => {
+  if (status === 'overdue') return 'Overdue';
+  if (status === 'paused') return 'Paused';
+  return 'Active';
+};
+
+const getRecurringStatusClass = (status) => {
+  if (status === 'overdue') return 'bg-destructive/10 text-destructive';
+  if (status === 'paused') return 'bg-muted text-muted-foreground';
+  return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
 };
 
 // API `serialNumber` -> display as 5-digit voucher number (e.g. 1 -> 00001)
@@ -94,6 +111,13 @@ export default function FinanceTrackingExpensesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [recurringSchedules, setRecurringSchedules] = useState([]);
+  const [recurringLoading, setRecurringLoading] = useState(false);
+  const [recurringError, setRecurringError] = useState('');
+  const [scheduleToEdit, setScheduleToEdit] = useState(null);
+  const [scheduleToPay, setScheduleToPay] = useState(null);
+  const [recurringSearch, setRecurringSearch] = useState('');
+  const [recurringStatusFilter, setRecurringStatusFilter] = useState('all');
   const [filters, setFilters] = useState({
     search: '',
     categoryId: searchParams.get('categoryId') || '',
@@ -103,6 +127,11 @@ export default function FinanceTrackingExpensesPage() {
     endDate: '',
   });
   const [showForm, setShowForm] = useState(false);
+  const [showRecurringModal, setShowRecurringModal] = useState(false);
+  const [recurringDetailsRow, setRecurringDetailsRow] = useState(null);
+  const [recurringHistory, setRecurringHistory] = useState([]);
+  const [recurringHistoryLoading, setRecurringHistoryLoading] = useState(false);
+  const [recurringHistoryError, setRecurringHistoryError] = useState('');
   const [form, setForm] = useState(EMPTY_EXPENSE);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -111,6 +140,35 @@ export default function FinanceTrackingExpensesPage() {
   const fileInputRef = useRef(null);
 
   const expenseCategories = useMemo(() => categories.filter((c) => c.type === 'expense' || c.type === 'both'), [categories]);
+  const recurringStats = useMemo(() => {
+    const total = recurringSchedules.length;
+    const active = recurringSchedules.filter((r) => (r.currentStatus || 'active') === 'active').length;
+    const overdue = recurringSchedules.filter((r) => (r.currentStatus || 'active') === 'overdue').length;
+    const missed = recurringSchedules.reduce((sum, r) => sum + Number(r.missedPayments || 0), 0);
+    return { total, active, overdue, missed };
+  }, [recurringSchedules]);
+
+  const filteredRecurringSchedules = useMemo(() => {
+    const q = recurringSearch.trim().toLowerCase();
+    return recurringSchedules.filter((r) => {
+      const status = r.currentStatus || (r.isActive === false ? 'paused' : 'active');
+      const statusOk = recurringStatusFilter === 'all' || status === recurringStatusFilter;
+      if (!statusOk) return false;
+      if (!q) return true;
+      const title = (r.title || '').toLowerCase();
+      const category =
+        (typeof r.category === 'object' ? r.category?.name : r.category || '').toLowerCase();
+      const account =
+        (typeof r.account === 'object' ? r.account?.name : r.account || '').toLowerCase();
+      const vendor = (r.vendor || '').toLowerCase();
+      return (
+        title.includes(q) ||
+        category.includes(q) ||
+        account.includes(q) ||
+        vendor.includes(q)
+      );
+    });
+  }, [recurringSchedules, recurringSearch, recurringStatusFilter]);
 
   const fetchExpenses = useCallback(async () => {
     if (!user?.college) return;
@@ -169,6 +227,26 @@ export default function FinanceTrackingExpensesPage() {
     fetchCategories();
     fetchAccounts();
   }, [user?.college, fetchCategories, fetchAccounts]);
+
+  const fetchRecurringSchedules = useCallback(async () => {
+    if (!user?.college) return;
+    try {
+      setRecurringLoading(true);
+      setRecurringError('');
+      const res = await api.get(`${FINANCE_BASE}/recurring-expenses?limit=200&sortBy=nextDueDate&sortOrder=asc`, {}, true);
+      const list = Array.isArray(res?.data ?? res) ? (res?.data ?? res) : [];
+      setRecurringSchedules(list);
+    } catch (err) {
+      setRecurringError(err.message || 'Failed to load recurring expenses');
+    } finally {
+      setRecurringLoading(false);
+    }
+  }, [user?.college]);
+
+  useEffect(() => {
+    if (!user?.college) return;
+    fetchRecurringSchedules();
+  }, [user?.college, fetchRecurringSchedules]);
 
   useEffect(() => {
     fetchExpenses();
@@ -337,6 +415,52 @@ export default function FinanceTrackingExpensesPage() {
     URL.revokeObjectURL(a.href);
   };
 
+  const handleEditRecurringSchedule = (row) => {
+    setScheduleToEdit(row);
+    setShowRecurringModal(true);
+  };
+
+  const handlePayRecurringSchedule = (row) => {
+    setScheduleToPay(row);
+  };
+
+  const handleDeleteRecurringSchedule = async (row) => {
+    if (!row?._id) return;
+    if (!window.confirm('Delete this recurring expense schedule?')) return;
+    try {
+      setRecurringError('');
+      await api.delete(`${FINANCE_BASE}/recurring-expenses/${row._id}`, {}, true);
+      showSuccess('Recurring expense deleted.');
+      if (scheduleToEdit?._id === row._id) setScheduleToEdit(null);
+      fetchRecurringSchedules();
+    } catch (err) {
+      setRecurringError(err.message || 'Failed to delete');
+    }
+  };
+
+  const handleViewRecurringSchedule = async (row) => {
+    if (!row?._id) return;
+    setRecurringDetailsRow(row);
+    setRecurringHistory([]);
+    setRecurringHistoryError('');
+    setRecurringHistoryLoading(true);
+    try {
+      const res = await api.get(`${FINANCE_BASE}/recurring-expenses/${row._id}/payment-history?limit=50`, {}, true);
+      const list = Array.isArray(res?.data ?? res) ? (res?.data ?? res) : [];
+      setRecurringHistory(list);
+    } catch (err) {
+      setRecurringHistoryError(err.message || 'Failed to load recurring payment history');
+    } finally {
+      setRecurringHistoryLoading(false);
+    }
+  };
+
+  const closeRecurringDetails = () => {
+    setRecurringDetailsRow(null);
+    setRecurringHistory([]);
+    setRecurringHistoryError('');
+  };
+
   const columns = useMemo(
     () => [
       {
@@ -420,6 +544,19 @@ export default function FinanceTrackingExpensesPage() {
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
+          <PermissionGate moduleKey="finance" action="view">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setScheduleToEdit(null);
+                setShowRecurringModal(true);
+              }}
+              className="gap-2"
+            >
+              <Repeat className="h-4 w-4" />
+              Recurring
+            </Button>
+          </PermissionGate>
           <PermissionGate moduleKey="finance" action="create">
             <Button
               onClick={() => {
@@ -465,6 +602,344 @@ export default function FinanceTrackingExpensesPage() {
           </Button>
         </div>
       </div>
+
+      {/* Recurring schedules */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Repeat className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Recurring expense manager</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Track schedules, overdue items, missed payments and payment history.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <PermissionGate moduleKey="finance" action="view">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={fetchRecurringSchedules}
+                disabled={recurringLoading}
+                className="gap-1 h-8"
+              >
+                <RefreshCcw className={`h-3.5 w-3.5 ${recurringLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </PermissionGate>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Total schedules</div>
+            <div className="text-lg font-semibold mt-1">{recurringStats.total}</div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Active</div>
+            <div className="text-lg font-semibold mt-1 text-emerald-600">{recurringStats.active}</div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Overdue</div>
+            <div className="text-lg font-semibold mt-1 text-destructive">{recurringStats.overdue}</div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Missed payments</div>
+            <div className="text-lg font-semibold mt-1">{recurringStats.missed}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="relative sm:col-span-2">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={recurringSearch}
+              onChange={(e) => setRecurringSearch(e.target.value)}
+              placeholder="Search recurring schedules..."
+              className="pl-8 h-9"
+            />
+          </div>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            value={recurringStatusFilter}
+            onChange={(e) => setRecurringStatusFilter(e.target.value)}
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="overdue">Overdue</option>
+            <option value="paused">Paused</option>
+          </select>
+        </div>
+
+        {recurringError && <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">{recurringError}</div>}
+
+        {recurringLoading && recurringSchedules.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>
+        ) : filteredRecurringSchedules.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-lg">No schedules match your search/filter.</p>
+        ) : (
+          <div className="rounded-lg border border-border overflow-x-auto">
+            <table className="w-full text-sm min-w-[980px]">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="text-left font-medium px-3 py-2">Title</th>
+                  <th className="text-left font-medium px-3 py-2">Amount</th>
+                  <th className="text-left font-medium px-3 py-2">Next payment</th>
+                  <th className="text-left font-medium px-3 py-2">Frequency</th>
+                  <th className="text-left font-medium px-3 py-2">Last payment</th>
+                  <th className="text-left font-medium px-3 py-2">Status</th>
+                  <th className="text-right font-medium px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecurringSchedules.map((row) => {
+                  const intervalNum = Number(row.interval ?? 1);
+                  const status = row.currentStatus || (row.isActive === false ? 'paused' : 'active');
+                  return (
+                    <tr key={row._id} className="border-b border-border last:border-b-0">
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium">{row.title || 'Untitled'}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {(row.category && (typeof row.category === 'object' ? row.category.name : row.category)) || 'No category'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-1 font-semibold">
+                          {formatCurrency(row.amount)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded-md px-2 py-1 font-semibold ${
+                          row.isOverdue ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                        }`}>
+                          {row.nextDueDate ? formatDateForInput(row.nextDueDate) : '—'}
+                        </span>
+                        {row.isOverdue ? (
+                          <div className="text-xs text-destructive mt-1">
+                            Overdue by {row.overdueDays || 0} day{Number(row.overdueDays || 0) === 1 ? '' : 's'}
+                          </div>
+                        ) : null}
+                        {Number(row.missedPayments || 0) > 0 ? (
+                          <div className="text-xs text-destructive mt-0.5">
+                            Missed payments: {row.missedPayments}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">
+                        {row.frequency}
+                        {intervalNum > 1 ? ` (every ${intervalNum})` : ''}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">
+                        {row.lastPaymentDate ? formatDateForInput(row.lastPaymentDate) : '—'}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${getRecurringStatusClass(status)}`}>
+                          {getRecurringStatusLabel(status)}
+                        </span>
+                        {row.isActive === false && <span className="ml-2 text-xs text-amber-600">Paused</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex justify-end gap-1.5">
+                          <PermissionGate moduleKey="finance" action="view">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1"
+                              onClick={() => handleViewRecurringSchedule(row)}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              View
+                            </Button>
+                          </PermissionGate>
+                          <PermissionGate moduleKey="finance" action="edit">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1"
+                              onClick={() => handleEditRecurringSchedule(row)}
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1"
+                              onClick={() => handlePayRecurringSchedule(row)}
+                            >
+                              <CreditCard className="h-3.5 w-3.5" />
+                              Pay
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1 text-destructive"
+                              onClick={() => handleDeleteRecurringSchedule(row)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          </PermissionGate>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <Dialog open={!!recurringDetailsRow} onOpenChange={(open) => !open && closeRecurringDetails()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{recurringDetailsRow?.title || 'Recurring expense details'}</DialogTitle>
+            <DialogDescription>Complete schedule and payment metadata.</DialogDescription>
+          </DialogHeader>
+          {recurringDetailsRow && (
+            <div className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Amount</div>
+                  <div className="mt-1 font-semibold text-emerald-700 dark:text-emerald-300">{formatCurrency(recurringDetailsRow.amount)}</div>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Next payment date</div>
+                  <div className="mt-1 font-semibold text-amber-700 dark:text-amber-300">{recurringDetailsRow.nextDueDate ? formatDateForInput(recurringDetailsRow.nextDueDate) : '—'}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Frequency</div>
+                  <div className="mt-1">{recurringDetailsRow.frequency || '—'}{Number(recurringDetailsRow.interval ?? 1) > 1 ? ` (every ${Number(recurringDetailsRow.interval)})` : ''}</div>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Schedule status</div>
+                  <div className="mt-1">{recurringDetailsRow.currentStatus || (recurringDetailsRow.isActive === false ? 'paused' : 'active')}</div>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Start date</div>
+                  <div className="mt-1">{recurringDetailsRow.startDate ? formatDateForInput(recurringDetailsRow.startDate) : '—'}</div>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">End date</div>
+                  <div className="mt-1">{recurringDetailsRow.endDate ? formatDateForInput(recurringDetailsRow.endDate) : '—'}</div>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Overdue days</div>
+                  <div className="mt-1">{Number(recurringDetailsRow.overdueDays || 0)}</div>
+                </div>
+                <div className="rounded-lg border border-border p-3">
+                  <div className="text-xs text-muted-foreground">Missed payments</div>
+                  <div className="mt-1">{Number(recurringDetailsRow.missedPayments || 0)}</div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border p-3 space-y-1">
+                <div className="text-xs text-muted-foreground">Payment details</div>
+                <div><span className="text-muted-foreground">Status:</span> {recurringDetailsRow.lastPaymentStatus || 'pending'}</div>
+                <div><span className="text-muted-foreground">Date:</span> {recurringDetailsRow.lastPaymentDate ? formatDateForInput(recurringDetailsRow.lastPaymentDate) : '—'}</div>
+                <div><span className="text-muted-foreground">Paid by:</span> {recurringDetailsRow.lastPaymentBy || '—'}</div>
+              </div>
+
+              <div className="rounded-lg border border-border p-3 space-y-1">
+                <div><span className="text-muted-foreground">Category:</span> {(recurringDetailsRow.category && (typeof recurringDetailsRow.category === 'object' ? recurringDetailsRow.category.name : recurringDetailsRow.category)) || '—'}</div>
+                <div><span className="text-muted-foreground">Account:</span> {(recurringDetailsRow.account && (typeof recurringDetailsRow.account === 'object' ? recurringDetailsRow.account.name : recurringDetailsRow.account)) || '—'}</div>
+                <div><span className="text-muted-foreground">Vendor:</span> {recurringDetailsRow.vendor || '—'}</div>
+                <div><span className="text-muted-foreground">Reference:</span> {recurringDetailsRow.referenceNumber || '—'}</div>
+                <div><span className="text-muted-foreground">Notes:</span> {recurringDetailsRow.notes || '—'}</div>
+              </div>
+
+              <div className="rounded-lg border border-border p-3 space-y-2">
+                <div className="text-xs text-muted-foreground">Payment history (from Expenses)</div>
+                {recurringHistoryError ? (
+                  <div className="text-sm text-destructive">{recurringHistoryError}</div>
+                ) : recurringHistoryLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading payment history…</div>
+                ) : recurringHistory.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No recurring payments recorded yet.</div>
+                ) : (
+                  <div className="rounded border border-border overflow-x-auto">
+                    <table className="w-full text-xs min-w-[640px]">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-2 py-1.5">Date</th>
+                          <th className="text-left px-2 py-1.5">Voucher</th>
+                          <th className="text-left px-2 py-1.5">Amount</th>
+                          <th className="text-left px-2 py-1.5">Account</th>
+                          <th className="text-left px-2 py-1.5">Status</th>
+                          <th className="text-left px-2 py-1.5">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recurringHistory.map((p) => (
+                          <tr key={p._id} className="border-t border-border">
+                            <td className="px-2 py-1.5">{p.date ? formatDateForInput(p.date) : '—'}</td>
+                            <td className="px-2 py-1.5">{formatVoucherNumber(p.serialNumber) || '—'}</td>
+                            <td className="px-2 py-1.5">{formatCurrency(p.amount)}</td>
+                            <td className="px-2 py-1.5">{(p.account && (typeof p.account === 'object' ? p.account.name : p.account)) || '—'}</td>
+                            <td className="px-2 py-1.5">{p.isCancelled ? 'Cancelled' : 'Completed'}</td>
+                            <td className="px-2 py-1.5">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2"
+                                onClick={() => router.push(`/app/expenses/${p._id}`)}
+                              >
+                                Details
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <RecurringExpenseModal
+        open={showRecurringModal}
+        onOpenChange={(v) => {
+          setShowRecurringModal(v);
+          if (!v) setScheduleToEdit(null);
+        }}
+        expenseCategories={expenseCategories}
+        accounts={accounts}
+        editingSchedule={scheduleToEdit}
+        onSaved={() => {
+          setScheduleToEdit(null);
+          fetchRecurringSchedules();
+        }}
+      />
+
+      <PayRecurringExpenseModal
+        open={!!scheduleToPay}
+        onOpenChange={(v) => {
+          if (!v) setScheduleToPay(null);
+        }}
+        recurring={scheduleToPay}
+        accounts={accounts}
+        onPaid={() => {
+          setScheduleToPay(null);
+          showSuccess('Recurring payment processed.');
+          fetchRecurringSchedules();
+          fetchExpenses();
+          if (recurringDetailsRow && scheduleToPay?._id === recurringDetailsRow._id) {
+            handleViewRecurringSchedule(scheduleToPay);
+          }
+        }}
+      />
 
       {/* Expense form modal */}
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
