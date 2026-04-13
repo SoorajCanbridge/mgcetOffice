@@ -629,14 +629,13 @@ export default function PaymentDetailsPage() {
             </div>
           </div>
           <div class="pr-head-right">
-            <div class="pr-doc-label">Payment receipt</div>
+            <div class="pr-doc-label">receipt</div>
             <div class="pr-doc-num">${esc(payment.paymentNumber || 'N/A')}</div>
             <span class="pr-badge ${st}">${esc(st)}</span>
           </div>
         </header>
-        ${stripChips ? `<div class="pr-strip">${stripChips}</div>` : ''}
         <div class="pr-body">
-          <div class="pr-title-center">Payment Receipt</div>
+          <div class="pr-title-center">Receipt</div>
           <div class="pr-grid">
             <section class="pr-panel">
               <div class="pr-panel-h">Received from</div>
@@ -843,7 +842,7 @@ export default function PaymentDetailsPage() {
 
             {/* Receipt identity */}
             <div className="flex-shrink-0 text-right">
-              <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase mb-1">Payment Receipt</p>
+              <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase mb-1">Receipt</p>
               <p className="text-2xl font-bold text-slate-900 tabular-nums">{payment.paymentNumber || 'N/A'}</p>
               <span className={`inline-flex items-center gap-1 mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold border tracking-wide uppercase ${sc.color}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`}></span>

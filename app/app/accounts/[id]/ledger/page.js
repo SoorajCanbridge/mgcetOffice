@@ -1,15 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   BookOpen,
   Plus,
-  Edit2,
-  Trash2,
   RefreshCcw,
   Eye,
   TrendingUp,
@@ -67,7 +65,6 @@ const formatDateForDisplay = (date) => {
 
 export default function AccountLedgerPage() {
   const params = useParams();
-  const router = useRouter();
   const { user } = useAuth();
   const accountId = params?.id;
 
@@ -75,7 +72,6 @@ export default function AccountLedgerPage() {
   const [ledgers, setLedgers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [deletingId, setDeletingId] = useState('');
   const [viewingEntry, setViewingEntry] = useState(null);
   const [filters, setFilters] = useState({
     entryType: '',
@@ -128,22 +124,6 @@ export default function AccountLedgerPage() {
     if (!accountId || !user?.college) return;
     fetchLedgers();
   }, [accountId, user?.college, fetchLedgers]);
-
-  const handleDeleteLedger = useCallback(async (row) => {
-    if (!row?._id || !window.confirm('Delete this ledger entry? This will revert the account balance change.')) return;
-    try {
-      setDeletingId(row._id);
-      setError('');
-      await api.delete(`${LEDGERS_BASE}/${row._id}`, {}, true);
-      await fetchLedgers();
-      await fetchAccount();
-      setViewingEntry(null);
-    } catch (err) {
-      setError(err.message || 'Failed to delete');
-    } finally {
-      setDeletingId('');
-    }
-  }, [fetchLedgers, fetchAccount]);
 
   const handleViewEntry = useCallback(async (id) => {
     try {
@@ -244,27 +224,8 @@ export default function AccountLedgerPage() {
         <Eye className="h-4 w-4" />
         View
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-1"
-        onClick={(e) => { e.stopPropagation(); router.push(`/app/ledgers?edit=${row._id}`); }}
-      >
-        <Edit2 className="h-4 w-4" />
-        Edit
-      </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        className="gap-1"
-        onClick={(e) => { e.stopPropagation(); handleDeleteLedger(row); }}
-        disabled={deletingId === row._id}
-      >
-        <Trash2 className="h-4 w-4" />
-        {deletingId === row._id ? 'Deleting...' : 'Delete'}
-      </Button>
     </div>
-  ), [deletingId, handleViewEntry, handleDeleteLedger, router]);
+  ), [handleViewEntry]);
 
   if (!accountId) {
     return (

@@ -17,7 +17,7 @@ import {
   Wallet, Receipt, Briefcase, Clock, GraduationCap,
   BarChart3, LayoutDashboard, Scale, Shield, ChevronRight, 
   LogOut, CreditCard, Command, Bell, Search, BookMarked, FileText, Tag, TrendingUp, TrendingDown,
-  Rocket, Building2, Package
+  Rocket, Building2, Package, Bookmark, Tags
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -199,6 +199,8 @@ const navGroups = [
     items: [
       { title: "Courses", url: "/app/courses", icon: BookOpen, moduleKey: "academic" },
       { title: "Students", url: "/app/students", icon: Users, moduleKey: "students" },
+      { title: "Student categories", url: "/app/students/categories", icon: Bookmark, moduleKey: "students" },
+      { title: "Student tags", url: "/app/students/tags", icon: Tags, moduleKey: "students" },
     ],
   },
   {

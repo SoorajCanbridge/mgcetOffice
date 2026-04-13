@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import {
   BookOpen,
   Plus,
-  Edit2,
-  Trash2,
   Save,
   X,
   RefreshCcw,
@@ -103,10 +101,8 @@ export default function LedgersPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [editingLedger, setEditingLedger] = useState(null);
   const [viewingLedger, setViewingLedger] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState('');
   const [showForm, setShowForm] = useState(false);
 
   const searchParams = useSearchParams();
@@ -215,7 +211,6 @@ export default function LedgersPage() {
   }, [user?.college, fetchLedgers]);
 
   const accountIdFromUrl = searchParams.get('accountId');
-  const editIdFromUrl = searchParams.get('edit');
   useEffect(() => {
     if (!accountIdFromUrl || !accounts.length) return;
     setLedgerForm((prev) => ({
@@ -225,31 +220,6 @@ export default function LedgersPage() {
     setShowForm(true);
     router.replace('/app/ledgers', { scroll: false });
   }, [accountIdFromUrl, accounts.length, router]);
-  useEffect(() => {
-    if (!editIdFromUrl || !ledgers.length || editingLedger) return;
-    const entry = ledgers.find((l) => l._id === editIdFromUrl);
-    if (entry) {
-      setEditingLedger(entry);
-      const lines = Array.isArray(entry.lines) && entry.lines.length
-        ? entry.lines.map((ln) => ({
-            account: ln.account?._id || ln.account || '',
-            transactionType: ln.transactionType || 'credit',
-            amount: ln.amount !== undefined ? String(ln.amount) : '',
-          }))
-        : [{ account: '', transactionType: 'credit', amount: '' }];
-      setLedgerForm({
-        entryDate: formatDateForInput(entry.entryDate),
-        entryType: entry.entryType || 'income',
-      description: entry.description || '',
-      reference: entry.reference || '',
-      category: entry.category?._id || entry.category || '',
-      notes: entry.notes || '',
-        lines,
-      });
-      setShowForm(true);
-      router.replace('/app/ledgers', { scroll: false });
-    }
-  }, [editIdFromUrl, ledgers.length, editingLedger, router]);
 
   // First line account for balance preview
   const firstLineAccountId = ledgerForm.lines?.[0]?.account;
@@ -272,7 +242,6 @@ export default function LedgersPage() {
 
   const resetForm = useCallback(() => {
     setLedgerForm(JSON.parse(JSON.stringify(EMPTY_LEDGER)));
-    setEditingLedger(null);
     setSelectedAccount(null);
     setShowForm(false);
   }, []);
@@ -406,13 +375,8 @@ export default function LedgersPage() {
         lines: linesPayload,
       };
 
-      if (editingLedger?._id) {
-        await api.put(`${LEDGERS_BASE}/${editingLedger._id}`, payload, {}, true);
-        showSuccess('Ledger entry updated successfully.');
-      } else {
-        await api.post(`${LEDGERS_BASE}`, payload, {}, true);
-        showSuccess('Ledger entry created successfully.');
-      }
+      await api.post(`${LEDGERS_BASE}`, payload, {}, true);
+      showSuccess('Ledger entry created successfully.');
       resetForm();
       await fetchLedgers();
       await fetchAccounts();
@@ -423,28 +387,7 @@ export default function LedgersPage() {
     }
   };
 
-  const handleEditLedger = (ledger) => {
-    setEditingLedger(ledger);
-    const lines = Array.isArray(ledger.lines) && ledger.lines.length
-      ? ledger.lines.map((ln) => ({
-          account: ln.account?._id || ln.account || '',
-          transactionType: ln.transactionType || 'credit',
-          amount: ln.amount !== undefined ? String(ln.amount) : '',
-        }))
-      : [{ ...EMPTY_LINE }];
-    setLedgerForm({
-      entryDate: formatDateForInput(ledger.entryDate),
-      entryType: lines.length === 2 ? 'transfer' : (ledger.entryType || 'income'),
-      description: ledger.description || '',
-      reference: ledger.reference || '',
-      category: ledger.category?._id || ledger.category || '',
-      notes: ledger.notes || '',
-      lines,
-    });
-    setShowForm(true);
-  };
-
-  const handleViewLedger = async (ledgerId) => {
+  const handleViewLedger = useCallback(async (ledgerId) => {
     try {
       const response = await api.get(`${LEDGERS_BASE}/${ledgerId}`, {}, true);
       const data = response?.data || response;
@@ -452,30 +395,7 @@ export default function LedgersPage() {
     } catch (err) {
       setError(err.message || 'Failed to load ledger details');
     }
-  };
-
-  const handleDeleteLedger = async (ledger) => {
-    if (!ledger?._id) return;
-    const confirmed =
-      typeof window !== 'undefined'
-        ? window.confirm(
-            'Delete this ledger entry? This will also revert the account balance change.',
-          )
-        : true;
-    if (!confirmed) return;
-    try {
-      setDeletingId(ledger._id);
-      setError('');
-      await api.delete(`${LEDGERS_BASE}/${ledger._id}`, {}, true);
-      showSuccess('Ledger entry deleted.');
-      await fetchLedgers();
-      await fetchAccounts(); // Refresh accounts to get updated balances
-    } catch (err) {
-      setError(err.message || 'Failed to delete ledger entry');
-    } finally {
-      setDeletingId('');
-    }
-  };
+  }, []);
 
   const summary = useMemo(() => {
     let credits = 0, debits = 0;
@@ -641,38 +561,9 @@ export default function LedgersPage() {
           <Eye className="h-4 w-4" />
           View
         </Button>
-        <PermissionGate moduleKey="finance" action="edit">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEditLedger(row);
-            }}
-          >
-            <Edit2 className="h-4 w-4" />
-            Edit
-          </Button>
-        </PermissionGate>
-        <PermissionGate moduleKey="finance" action="delete">
-          <Button
-            variant="destructive"
-            size="sm"
-            className="gap-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDeleteLedger(row);
-            }}
-            disabled={deletingId === row._id}
-          >
-            <Trash2 className="h-4 w-4" />
-            {deletingId === row._id ? 'Deleting...' : 'Delete'}
-          </Button>
-        </PermissionGate>
       </div>
     ),
-    [deletingId]
+    [handleViewLedger]
   );
 
   return (
@@ -873,14 +764,14 @@ export default function LedgersPage() {
 
       {/* Ledger Form */}
       {showForm && (
-        <PermissionGate moduleKey="finance" action={editingLedger ? 'edit' : 'create'}>
+        <PermissionGate moduleKey="finance" action="create">
         <form
           onSubmit={handleSaveLedger}
           className="bg-card border border-border rounded-lg p-6 space-y-4"
         >
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">
-              {editingLedger ? 'Edit Ledger Entry' : 'New Ledger Entry'}
+              New Ledger Entry
             </h2>
             <Button type="button" variant="ghost" size="icon" onClick={resetForm}>
               <X className="h-4 w-4" />
@@ -1102,11 +993,7 @@ export default function LedgersPage() {
             </Button>
             <Button type="submit" size="sm" disabled={saving}>
               <Save className="h-4 w-4 mr-2" />
-              {saving
-                ? 'Saving...'
-                : editingLedger
-                ? 'Update Entry'
-                : 'Create Entry'}
+              {saving ? 'Saving...' : 'Create Entry'}
             </Button>
           </div>
         </form>

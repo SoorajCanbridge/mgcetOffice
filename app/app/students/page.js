@@ -14,6 +14,7 @@ import { AnalyticsStrip } from '@/components/analytics/AnalyticsStrip';
 
 const EMPTY_STUDENT = {
   name: '',
+  studentId: '',
   email: '',
   phone: '',
   alternatePhone: '',
@@ -27,6 +28,8 @@ const EMPTY_STUDENT = {
   },
   rollNumber: '',
   course: '',
+  category: '',
+  tags: [],
   enrollmentDate: '',
   enrollmentStatus: 'enrolled',
   graduationDate: '',
@@ -38,6 +41,18 @@ const EMPTY_STUDENT = {
   },
   photo: '',
   isActive: true,
+};
+
+const normalizeCategoryId = (student) => {
+  const c = student?.category;
+  if (!c) return '';
+  return typeof c === 'object' ? (c._id || c.id || '') : String(c);
+};
+
+const normalizeTagIds = (student) => {
+  const raw = student?.tags;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((t) => (typeof t === 'object' ? (t._id || t.id) : t)).filter(Boolean);
 };
 
 
@@ -110,6 +125,13 @@ const normalizeLevelValues = (levelValues) => {
 
 const getStudentId = (student) => student._id || student.id;
 
+const DEFAULT_TAG_SWATCH = '#6366f1';
+const tagObjectSwatch = (tag) => {
+  if (!tag || typeof tag !== 'object') return DEFAULT_TAG_SWATCH;
+  const v = (tag.color || '').trim();
+  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v) ? v : DEFAULT_TAG_SWATCH;
+};
+
 const normalizeCollegeId = (college) => {
   if (!college) return '';
   if (typeof college === 'object') {
@@ -124,6 +146,8 @@ export default function StudentsPage() {
 
   const [students, setStudents] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [studentCategories, setStudentCategories] = useState([]);
+  const [studentTags, setStudentTags] = useState([]);
   const [levelLabels, setLevelLabels] = useState(DEFAULT_LEVEL_LABELS);
   const [levelValues, setLevelValues] = useState({ A: [], B: [], C: [] });
   const [stats, setStats] = useState(null);
@@ -188,6 +212,26 @@ export default function StudentsPage() {
     }
   }, [user?.college]);
 
+  const fetchStudentTaxonomy = useCallback(async () => {
+    if (!user?.college) return;
+    const collegeId = normalizeCollegeId(user.college);
+    const qs = collegeId ? `?collegeId=${encodeURIComponent(collegeId)}` : '';
+    try {
+      const [catRes, tagRes] = await Promise.all([
+        api.get(`/student-categories${qs}`, {}, true),
+        api.get(`/student-tags${qs}`, {}, true),
+      ]);
+      const cats = catRes?.data ?? catRes;
+      const tags = tagRes?.data ?? tagRes;
+      setStudentCategories(Array.isArray(cats) ? cats : []);
+      setStudentTags(Array.isArray(tags) ? tags : []);
+    } catch (err) {
+      console.error('Failed to load student categories/tags:', err);
+      setStudentCategories([]);
+      setStudentTags([]);
+    }
+  }, [user?.college]);
+
   const fetchStudents = useCallback(async () => {
     if (!user?.college) return;
     try {
@@ -231,6 +275,7 @@ export default function StudentsPage() {
     if (!user?.college) return;
     fetchLevelLabels();
     fetchCourses();
+    fetchStudentTaxonomy();
     fetchStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.college]);
@@ -296,6 +341,16 @@ export default function StudentsPage() {
     setError('');
   }, []);
 
+  const handleTagToggle = useCallback((tagId) => {
+    setFormData((prev) => {
+      const tags = Array.isArray(prev.tags) ? [...prev.tags] : [];
+      const idx = tags.indexOf(tagId);
+      if (idx >= 0) tags.splice(idx, 1);
+      else tags.push(tagId);
+      return { ...prev, tags };
+    });
+  }, []);
+
   const validateForm = useCallback(() => {
     const nextErrors = {};
     const name = formData.name.trim();
@@ -329,6 +384,7 @@ export default function StudentsPage() {
     try {
       const payload = {
         name: formData.name.trim(),
+        studentId: formData.studentId.trim() || undefined,
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         alternatePhone: formData.alternatePhone.trim() || undefined,
@@ -344,6 +400,8 @@ export default function StudentsPage() {
           : undefined,
         rollNumber: formData.rollNumber.trim() || undefined,
         course: formData.course,
+        category: formData.category || null,
+        tags: Array.isArray(formData.tags) ? formData.tags : [],
         enrollmentDate: formData.enrollmentDate,
         enrollmentStatus: formData.enrollmentStatus,
         graduationDate: formData.graduationDate || undefined,
@@ -393,6 +451,7 @@ export default function StudentsPage() {
     setEditingStudent(student);
     setFormData({
       name: student.name || '',
+      studentId: student.studentId || '',
       email: student.email || '',
       phone: student.phone || '',
       alternatePhone: student.alternatePhone || '',
@@ -406,6 +465,8 @@ export default function StudentsPage() {
       },
       rollNumber: student.rollNumber || '',
       course: student.course?._id || student.course || '',
+      category: normalizeCategoryId(student),
+      tags: normalizeTagIds(student),
       enrollmentDate: formatDateForInput(student.enrollmentDate),
       enrollmentStatus: student.enrollmentStatus || 'enrolled',
       graduationDate: formatDateForInput(student.graduationDate),
@@ -644,6 +705,48 @@ export default function StudentsPage() {
         if (!row.course) return '-';
         const course = typeof row.course === 'object' ? row.course : null;
         return course ? `${course.name}${course.batch ? ` (${course.batch})` : ''}` : '-';
+      },
+    },
+    {
+      id: 'category',
+      accessorKey: 'category',
+      header: 'Category',
+      type: 'text',
+      searchable: true,
+      cell: ({ row }) => {
+        const c = row.category;
+        if (!c) return '—';
+        return typeof c === 'object' ? (c.name || '—') : '—';
+      },
+    },
+    {
+      id: 'tags',
+      accessorKey: 'tags',
+      header: 'Tags',
+      type: 'text',
+      searchable: true,
+      cell: ({ row }) => {
+        const list = row.tags;
+        if (!Array.isArray(list) || list.length === 0) return '—';
+        const objects = list.filter((t) => typeof t === 'object' && t?.name);
+        if (objects.length === 0) return '—';
+        return (
+          <div className="flex flex-wrap gap-1.5 max-w-[240px]">
+            {objects.map((t, i) => (
+              <span
+                key={t._id || i}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-xs font-medium text-foreground"
+              >
+                <span
+                  className="h-2 w-2 rounded-full shrink-0 ring-1 ring-border"
+                  style={{ backgroundColor: tagObjectSwatch(t) }}
+                  aria-hidden
+                />
+                {t.name}
+              </span>
+            ))}
+          </div>
+        );
       },
     },
     {
@@ -967,6 +1070,9 @@ export default function StudentsPage() {
             formData={formData}
             formErrors={formErrors}
             courses={courses}
+            studentCategories={studentCategories}
+            studentTags={studentTags}
+            onTagToggle={handleTagToggle}
             editingStudent={editingStudent}
             saving={saving}
             error={error}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -43,6 +44,8 @@ import {
   Download,
   Trash2,
   Percent,
+  Bookmark,
+  Tags,
 } from 'lucide-react';
 import { api, API_URL, deleteUploadedFile } from '@/lib/api';
 import { getStudentPhotoUrl } from '@/lib/utils';
@@ -93,6 +96,8 @@ const EMPTY_STUDENT = {
   },
   rollNumber: '',
   course: '',
+  category: '',
+  tags: [],
   enrollmentDate: '',
   enrollmentStatus: 'enrolled',
   graduationDate: '',
@@ -105,6 +110,32 @@ const EMPTY_STUDENT = {
   photo: '',
   isActive: true,
 };
+
+const normalizeCollegeId = (college) => {
+  if (!college) return '';
+  if (typeof college === 'object') return college._id || college.id || '';
+  return String(college);
+};
+
+const normalizeCategoryId = (student) => {
+  const c = student?.category;
+  if (!c) return '';
+  return typeof c === 'object' ? (c._id || c.id || '') : String(c);
+};
+
+const normalizeTagIds = (student) => {
+  const raw = student?.tags;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((t) => (typeof t === 'object' ? (t._id || t.id) : t)).filter(Boolean);
+};
+
+const DEFAULT_TAG_SWATCH = '#6366f1';
+
+function tagSwatchColor(tag) {
+  if (!tag || typeof tag !== 'object') return DEFAULT_TAG_SWATCH;
+  const v = (tag.color || '').trim();
+  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v) ? v : DEFAULT_TAG_SWATCH;
+}
 
 const formatDateForInput = (date) => {
   if (!date) return '';
@@ -126,6 +157,8 @@ export default function StudentDetailsPage() {
   const [student, setStudent] = useState(null);
   const [course, setCourse] = useState(null);
   const [courses, setCourses] = useState([]);
+  const [studentCategories, setStudentCategories] = useState([]);
+  const [studentTags, setStudentTags] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [stats, setStats] = useState(null);
@@ -162,13 +195,33 @@ export default function StudentDetailsPage() {
   const fetchCourses = useCallback(async () => {
     if (!user?.college) return;
     try {
-      const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
+      const collegeId = normalizeCollegeId(user.college);
       const response = await api.get(`/academic/courses?collegeId=${collegeId}`, {}, true);
       const data = response?.data || response || [];
       setCourses(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load courses:', err);
       setCourses([]);
+    }
+  }, [user?.college]);
+
+  const fetchStudentTaxonomy = useCallback(async () => {
+    if (!user?.college) return;
+    const collegeId = normalizeCollegeId(user.college);
+    const qs = collegeId ? `?collegeId=${encodeURIComponent(collegeId)}` : '';
+    try {
+      const [catRes, tagRes] = await Promise.all([
+        api.get(`/student-categories${qs}`, {}, true),
+        api.get(`/student-tags${qs}`, {}, true),
+      ]);
+      const cats = catRes?.data ?? catRes;
+      const tags = tagRes?.data ?? tagRes;
+      setStudentCategories(Array.isArray(cats) ? cats : []);
+      setStudentTags(Array.isArray(tags) ? tags : []);
+    } catch (err) {
+      console.error('Failed to load student categories/tags:', err);
+      setStudentCategories([]);
+      setStudentTags([]);
     }
   }, [user?.college]);
 
@@ -266,7 +319,8 @@ export default function StudentDetailsPage() {
     if (!user?.college) return;
     fetchStudentDetails();
     fetchCourses();
-  }, [user?.college, studentId, fetchStudentDetails, fetchCourses]);
+    fetchStudentTaxonomy();
+  }, [user?.college, studentId, fetchStudentDetails, fetchCourses, fetchStudentTaxonomy]);
 
   useEffect(() => {
     if (studentId) {
@@ -342,6 +396,16 @@ export default function StudentDetailsPage() {
     setFormError('');
   }, []);
 
+  const handleTagToggle = useCallback((tagId) => {
+    setFormData((prev) => {
+      const tags = Array.isArray(prev.tags) ? [...prev.tags] : [];
+      const idx = tags.indexOf(tagId);
+      if (idx >= 0) tags.splice(idx, 1);
+      else tags.push(tagId);
+      return { ...prev, tags };
+    });
+  }, []);
+
   const validateForm = useCallback(() => {
     const nextErrors = {};
     const name = formData.name.trim();
@@ -390,6 +454,8 @@ export default function StudentDetailsPage() {
           : undefined,
         rollNumber: formData.rollNumber.trim() || undefined,
         course: formData.course,
+        category: formData.category || null,
+        tags: Array.isArray(formData.tags) ? formData.tags : [],
         enrollmentDate: formData.enrollmentDate,
         enrollmentStatus: formData.enrollmentStatus,
         graduationDate: formData.graduationDate || undefined,
@@ -508,6 +574,8 @@ export default function StudentDetailsPage() {
       },
       rollNumber: student.rollNumber || '',
       course: student.course?._id || student.course || '',
+      category: normalizeCategoryId(student),
+      tags: normalizeTagIds(student),
       enrollmentDate: formatDateForInput(student.enrollmentDate),
       enrollmentStatus: student.enrollmentStatus || 'enrolled',
       graduationDate: formatDateForInput(student.graduationDate),
@@ -1027,6 +1095,49 @@ export default function StudentDetailsPage() {
     [handleViewPayment],
   );
 
+  const resolvedCategory = useMemo(() => {
+    if (!student?.category) return null;
+    const c = student.category;
+    if (typeof c === 'object' && c !== null) {
+      const id = c._id || c.id;
+      return {
+        id: id != null ? String(id) : null,
+        name: (c.name || '').trim() || '—',
+        description: (c.description || '').trim(),
+      };
+    }
+    const id = String(c);
+    const fromList = studentCategories.find((x) => String(x._id || x.id) === id);
+    return {
+      id,
+      name: (fromList?.name || '').trim() || 'Category',
+      description: (fromList?.description || '').trim(),
+    };
+  }, [student, studentCategories]);
+
+  const resolvedTags = useMemo(() => {
+    if (!student?.tags || !Array.isArray(student.tags) || student.tags.length === 0) return [];
+    return student.tags.map((t, idx) => {
+      if (typeof t === 'object' && t !== null && (t.name || t._id || t.id)) {
+        const id = t._id || t.id;
+        return {
+          key: id != null ? String(id) : `tag-${idx}`,
+          id: id != null ? String(id) : null,
+          name: (t.name || '').trim() || 'Tag',
+          color: tagSwatchColor(t),
+        };
+      }
+      const id = String(t);
+      const fromList = studentTags.find((x) => String(x._id || x.id) === id);
+      return {
+        key: id,
+        id,
+        name: (fromList?.name || '').trim() || 'Tag',
+        color: tagSwatchColor(fromList || { color: '' }),
+      };
+    });
+  }, [student, studentTags]);
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto space-y-6">
@@ -1100,6 +1211,55 @@ export default function StudentDetailsPage() {
             <p className="text-muted-foreground mt-2">
               Student ID: <span className="font-semibold">{student.studentId || student.rollNumber || 'N/A'}</span>
             </p>
+            {(resolvedCategory || resolvedTags.length > 0) && (
+              <div className="mt-3 flex flex-col gap-2.5 max-w-3xl">
+                {resolvedCategory && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">Category</span>
+                    {resolvedCategory.id ? (
+                      <Link
+                        href={`/app/students/categories/${resolvedCategory.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-2.5 py-1 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Bookmark className="h-3.5 w-3.5 shrink-0" />
+                        {resolvedCategory.name}
+                      </Link>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-sm font-medium">
+                        <Bookmark className="h-3.5 w-3.5 shrink-0" />
+                        {resolvedCategory.name}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {resolvedTags.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tags className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                    <div className="flex flex-wrap gap-1.5">
+                      {resolvedTags.map((tg) => (
+                        <span
+                          key={tg.key}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium"
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full shrink-0 ring-1 ring-border"
+                            style={{ backgroundColor: tg.color }}
+                            aria-hidden
+                          />
+                          {tg.name}
+                        </span>
+                      ))}
+                    </div>
+                    <Link
+                      href="/app/students/tags"
+                      className="text-xs text-primary hover:underline ml-1"
+                    >
+                      Manage tags
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -1180,6 +1340,68 @@ export default function StudentDetailsPage() {
               <p className="font-medium mt-1 capitalize">{student.gender}</p>
             </div>
           )}
+
+          <div className="md:col-span-2 lg:col-span-3 rounded-lg border border-border bg-muted/20 p-4 space-y-4">
+            <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <Bookmark className="h-4 w-4 text-primary" />
+              Category & tags
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Student category</p>
+                {resolvedCategory ? (
+                  <div className="space-y-1">
+                    {resolvedCategory.id ? (
+                      <Link
+                        href={`/app/students/categories/${resolvedCategory.id}`}
+                        className="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Bookmark className="h-4 w-4 shrink-0" />
+                        {resolvedCategory.name}
+                      </Link>
+                    ) : (
+                      <p className="font-semibold">{resolvedCategory.name}</p>
+                    )}
+                    {resolvedCategory.description ? (
+                      <p className="text-sm text-muted-foreground">{resolvedCategory.description}</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No category assigned. Use Edit student to set one.</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Tags</p>
+                {resolvedTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {resolvedTags.map((tg) => (
+                      <span
+                        key={tg.key}
+                        className="inline-flex items-center gap-2 rounded-full border border-border bg-background pl-1 pr-3 py-1 text-sm font-medium shadow-sm"
+                      >
+                        <span
+                          className="h-6 w-6 rounded-full border border-border shrink-0"
+                          style={{ backgroundColor: tg.color }}
+                          aria-hidden
+                        />
+                        {tg.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No tags assigned.</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-3">
+                  Edit this student to change category or tags, or{' '}
+                  <Link href="/app/students/tags" className="text-primary font-medium hover:underline">
+                    open the tags page
+                  </Link>{' '}
+                  to manage tag definitions.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {student.address && (
             <div className="md:col-span-2 lg:col-span-3">
               <p className="text-sm text-muted-foreground">Address</p>
@@ -1538,6 +1760,9 @@ export default function StudentDetailsPage() {
           formData={formData}
           formErrors={formErrors}
           courses={courses}
+          studentCategories={studentCategories}
+          studentTags={studentTags}
+          onTagToggle={handleTagToggle}
           editingStudent={student}
           saving={saving}
           error={formError}

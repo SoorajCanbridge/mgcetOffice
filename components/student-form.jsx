@@ -18,10 +18,21 @@ const GENDERS = [
   { value: 'other', label: 'Other' },
 ];
 
+const DEFAULT_TAG_COLOR = '#6366f1';
+
+function tagSwatchColor(tag) {
+  const v = (tag?.color || '').trim();
+  if (/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(v)) return v;
+  return DEFAULT_TAG_COLOR;
+}
+
 export default function StudentForm({
   formData,
   formErrors,
   courses,
+  studentCategories = [],
+  studentTags = [],
+  onTagToggle,
   editingStudent,
   saving,
   error,
@@ -38,6 +49,9 @@ export default function StudentForm({
   onPhotoClear,
   photoInputRef,
 }) {
+  const activeCategories = studentCategories.filter((c) => c.isActive !== false);
+  const activeTags = studentTags.filter((t) => t.isActive !== false);
+  const selectedTagIds = Array.isArray(formData.tags) ? formData.tags : [];
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-card border border-border rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
@@ -127,6 +141,19 @@ export default function StudentForm({
                 className={formErrors.name ? 'border-destructive' : ''}
               />
               {formErrors.name && <p className="text-sm text-destructive mt-1">{formErrors.name}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Student ID <span className="text-destructive">*</span>
+              </label>
+              <Input
+                name="studentId"
+                value={formData.studentId}
+                onChange={onChange}
+                placeholder="Auto-generated if left blank"
+                className={formErrors.studentId ? 'border-destructive' : ''}
+              />
+              {formErrors.studentId && <p className="text-sm text-destructive mt-1">{formErrors.studentId}</p>}
             </div>
 
             <div>
@@ -264,6 +291,57 @@ export default function StudentForm({
                 ))}
               </select>
               {formErrors.course && <p className="text-sm text-destructive mt-1">{formErrors.course}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Student category</label>
+              <select
+                name="category"
+                value={formData.category ?? ''}
+                onChange={onChange}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">None</option>
+                {activeCategories.map((cat) => (
+                  <option key={cat._id} value={cat._id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">Manage lists under Academics → Student categories.</p>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium mb-2">Tags</label>
+              {activeTags.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No tags defined. Add them under Academics → Student tags.</p>
+              ) : (
+                <div className="flex flex-wrap gap-3 rounded-md border border-input bg-background p-3">
+                  {activeTags.map((tag) => {
+                    const id = tag._id;
+                    const checked = selectedTagIds.includes(id);
+                    return (
+                      <label
+                        key={id}
+                        className="flex items-center gap-2 text-sm cursor-pointer rounded-md border border-transparent px-2 py-1.5 hover:bg-muted/60 focus-within:ring-1 focus-within:ring-ring"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input"
+                          checked={checked}
+                          onChange={() => onTagToggle?.(id)}
+                        />
+                        <span
+                          className="h-5 w-5 rounded border border-border shrink-0 shadow-sm"
+                          style={{ backgroundColor: tagSwatchColor(tag) }}
+                          aria-hidden
+                        />
+                        <span>{tag.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div>
