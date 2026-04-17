@@ -5,7 +5,7 @@ module.exports = {
     './components/**/*.{js,jsx}',
     './contexts/**/*.{js,jsx}',
   ],
-  darkMode: ['class', 'class'],
+  darkMode: 'class',
   theme: {
   	extend: {
   		colors: {
@@ -19,7 +19,9 @@ module.exports = {
   			'border-color-hover': 'var(--border-color-hover)',
   			primary: {
   				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
+  				foreground: 'hsl(var(--primary-foreground))',
+  				active: 'hsl(var(--primary-active, var(--primary)))',
+  				soft: 'hsl(var(--primary-soft, var(--primary)))'
   			},
   			'primary-hover': 'var(--primary-hover)',
   			'primary-light': 'var(--primary-light)',
@@ -47,7 +49,8 @@ module.exports = {
   			},
   			accent: {
   				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
+  				foreground: 'hsl(var(--accent-foreground))',
+  				active: 'hsl(var(--accent-active, var(--accent)))'
   			},
   			destructive: {
   				DEFAULT: 'hsl(var(--destructive))',
@@ -70,6 +73,8 @@ module.exports = {
   				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
   				accent: 'hsl(var(--sidebar-accent))',
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+  				'active': 'hsl(var(--sidebar-active, var(--sidebar-accent)))',
+  				'active-foreground': 'hsl(var(--sidebar-active-foreground, var(--sidebar-accent-foreground)))',
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
   			}
@@ -84,16 +89,29 @@ module.exports = {
   			sm: 'var(--shadow-sm)',
   			md: 'var(--shadow-md)',
   			lg: 'var(--shadow-lg)',
-  			xl: 'var(--shadow-xl)'
+  			xl: 'var(--shadow-xl)',
+  			active: 'var(--shadow-active, 0 0 0 1px hsl(var(--ring) / 0.45), 0 8px 20px -12px hsl(var(--primary) / 0.55))',
+  			inset: 'inset 0 1px 0 hsl(var(--foreground) / 0.06)'
   		},
   		transitionProperty: {
-  			all: 'all'
+  			all: 'all',
+  			colors: 'color, background-color, border-color, text-decoration-color, fill, stroke',
+  			size: 'width, height, padding, margin',
+  			shadow: 'box-shadow'
   		},
   		transitionDuration: {
-  			default: '0.3s'
+  			default: '220ms',
+  			fast: '140ms',
+  			slow: '320ms'
   		},
   		transitionTimingFunction: {
-  			default: 'cubic-bezier(0.4, 0, 0.2, 1)'
+  			default: 'cubic-bezier(0.4, 0, 0.2, 1)',
+  			emphasized: 'cubic-bezier(0.2, 0.9, 0.2, 1)'
+  		},
+  		scale: {
+  			'98': '.98',
+  			'99': '.99',
+  			'101': '1.01'
   		}
   	}
   },

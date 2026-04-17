@@ -581,6 +581,7 @@ export default function InvoicesPage() {
     if (!s) {
       setInvoiceForm((prev) => ({ ...prev, student: id, studentImage: '' }));
       setStudentSelectModalOpen(false);
+      if (id) setInvoiceFormStep(2);
       return;
     }
     const rawAddress = s.address || s.permanentAddress;
@@ -599,6 +600,7 @@ export default function InvoicesPage() {
       },
     }));
     setStudentSelectModalOpen(false);
+    setInvoiceFormStep(2);
   };
 
   const studentLevelOptions = useMemo(() => {
@@ -1308,26 +1310,6 @@ export default function InvoicesPage() {
     });
   }, [invoiceForm.lineItemPaidEnabled, invoiceForm.items]);
 
-  const lineItemDescSpan = useMemo(() => {
-    const d = invoiceForm.lineItemDiscountEnabled ? 2 : 0;
-    const t = invoiceForm.taxCalculationMethod === 'product' ? 1 : 0;
-    const p = invoiceForm.lineItemPaidEnabled ? 1 : 0;
-    return Math.max(2, 12 - 6 - d - t - p);
-  }, [
-    invoiceForm.lineItemDiscountEnabled,
-    invoiceForm.taxCalculationMethod,
-    invoiceForm.lineItemPaidEnabled,
-  ]);
-
-  const lineItemDescColClass =
-    lineItemDescSpan <= 2
-      ? 'col-span-2'
-      : lineItemDescSpan === 3
-        ? 'col-span-3'
-        : lineItemDescSpan === 4
-          ? 'col-span-4'
-          : 'col-span-5';
-
   // Define columns for Invoices DataTable
   const invoiceColumns = useMemo(() => [
     {
@@ -1717,7 +1699,7 @@ export default function InvoicesPage() {
 
       {/* Invoice Form Modal */}
       <Dialog open={showForm} onOpenChange={(open) => { if (!open) resetForm(); }}>
-        <DialogContent className={`flex flex-col p-0 gap-0 ${invoiceFormStep === 2 && !editingInvoice ? 'max-w-5xl' : 'max-w-4xl'} max-h-[90vh]`}>
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-full flex-col gap-0 overflow-hidden rounded-none border-0 p-0 left-0 top-0 translate-x-0 translate-y-0 sm:max-w-full sm:rounded-none">
           <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0 border-b border-border bg-muted/20">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -1726,14 +1708,14 @@ export default function InvoicesPage() {
                 </div>
                 <div>
                   <DialogTitle className="text-xl font-semibold">
-                    {invoiceFormStep === 3 ? 'Invoice saved' : editingInvoice ? 'Edit Invoice' : invoiceFormStep === 1 ? 'New Invoice' : 'Invoice Details'}
+                    {invoiceFormStep === 3 ? 'Invoice saved' : editingInvoice ? 'Edit Invoice' : invoiceFormStep === 1 ? 'New Invoice' : 'Enter Invoice Details'}
                   </DialogTitle>
                   <DialogDescription className="mt-0.5">
                     {invoiceFormStep === 1
                       ? 'Select who this invoice is for'
                       : invoiceFormStep === 3
                       ? 'Mark as sent, download, or send via email'
-                      : editingInvoice ? 'Update details and line items' : 'Add dates, line items, and totals'}
+                      : editingInvoice ? 'Update details and line items' : 'Enter invoice dates,items, and totals'}
                   </DialogDescription>
                 </div>
               </div>
@@ -1757,7 +1739,13 @@ export default function InvoicesPage() {
             </div>
           </DialogHeader>
           <form onSubmit={handleSaveInvoice} className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            <div
+              className={`flex-1 overflow-y-auto px-6 py-5 ${
+                invoiceFormStep === 1
+                  ? 'flex min-h-0 flex-col justify-center'
+                  : 'space-y-6'
+              }`}
+            >
 
           {invoiceFormStep === 3 && savedDraftInvoice ? (
             /* Step 3: Post-save actions – boxed cards with icons */
@@ -1829,8 +1817,8 @@ export default function InvoicesPage() {
             </section>
           ) : invoiceFormStep === 1 ? (
             /* Step 1: Choose recipient – two options then show form */
-            <section className="max-w-2xl">
-              <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <section className="mx-auto w-full max-w-md sm:max-w-lg">
+              <div className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
                 <div className="flex items-center gap-2 mb-3">
                   <User className="h-5 w-5 text-primary" />
                   <h3 className="text-base font-semibold">Bill To</h3>
@@ -1952,8 +1940,10 @@ export default function InvoicesPage() {
               </div>
             </section>
           ) : (
-            /* Step 2: Selected recipient summary + Details, Items, Totals, Notes */
-            <>
+            /* Step 2: Main column + sticky Tax & Totals on the right (lg+) */
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_minmax(16rem,19rem)] lg:items-start lg:gap-6">
+            <div className="min-w-0 space-y-6 lg:col-start-1 lg:row-start-1">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Recipient summary */}
             <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <div className="flex items-start justify-between gap-4">
@@ -2008,7 +1998,7 @@ export default function InvoicesPage() {
                 <Calendar className="h-5 w-5 text-primary" />
                 <h3 className="text-base font-semibold">Invoice Details</h3>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1.5">Invoice Date *</label>
                   <Input
@@ -2058,16 +2048,31 @@ export default function InvoicesPage() {
                 )}
               </div>
             </section>
+            </div>
 
             {/* Line items */}
             <section className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                  <Receipt className="h-5 w-5 text-primary" />
-                  <h3 className="text-base font-semibold">Line Items</h3>
+              <div className="flex flex-col gap-3 border-b border-border bg-gradient-to-b from-muted/50 to-muted/25 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="min-w-0 flex-1 space-y-2.5">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/15">
+                      <Receipt className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0 pt-0.5">
+                      <h3 className="text-base font-semibold tracking-tight">Items</h3>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                        {invoiceForm.items.length === 0
+                          ? 'Add what you are billing for. Turn on optional columns when you need per-line tax, discount, or paid amounts.'
+                          : `${invoiceForm.items.length} ${invoiceForm.items.length === 1 ? 'line' : 'lines'} — description and amounts save with the invoice.`}
+                      </p>
+                    </div>
                   </div>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div
+                    className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-lg border border-border/70 bg-background/90 px-3 py-2.5 shadow-sm"
+                    role="group"
+                    aria-label="Line item column options"
+                  >
+                  <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-foreground">
                     <Checkbox
                       checked={invoiceForm.taxCalculationMethod === 'product'}
                       onCheckedChange={(checked) =>
@@ -2097,9 +2102,11 @@ export default function InvoicesPage() {
                         })
                       }
                     />
-                    Product-level tax
+                    <span>
+                      Per-line tax <span className="text-muted-foreground">(GST % per row)</span>
+                    </span>
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-foreground">
                     <Checkbox
                       checked={!!invoiceForm.lineItemDiscountEnabled}
                       onCheckedChange={(checked) =>
@@ -2128,9 +2135,11 @@ export default function InvoicesPage() {
                         })
                       }
                     />
-                    Product-level discount
+                    <span>
+                      Per-line discount <span className="text-muted-foreground">(₹ per row)</span>
+                    </span>
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-foreground">
                     <Checkbox
                       checked={!!invoiceForm.lineItemPaidEnabled}
                       onCheckedChange={(checked) =>
@@ -2159,43 +2168,72 @@ export default function InvoicesPage() {
                         })
                       }
                     />
-                    Product-level paid
+                    <span>
+                      Per-line paid <span className="text-muted-foreground">(already collected)</span>
+                    </span>
                   </label>
+                  </div>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={addItem}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Item
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="h-9 w-full shrink-0 gap-1.5 sm:h-9 sm:w-auto"
+                  onClick={addItem}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add line
                 </Button>
               </div>
-              <div className="p-4 space-y-2">
+              <div className="min-w-0 space-y-1.5 bg-muted/15 p-3 sm:p-4">
               {invoiceForm.items.length > 0 && (
-                <div className="grid grid-cols-12 gap-1 px-2 text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                  <div className={lineItemDescColClass}>Description</div>
-                  <div className="col-span-1 text-right">Qty</div>
-                  <div className="col-span-2 text-right">Cost / Fee (₹)</div>
-                  <div className="col-span-2 text-right">Total (₹)</div>
-                  {invoiceForm.lineItemDiscountEnabled && <div className="col-span-2 text-right">Discount</div>}
-                  {invoiceForm.taxCalculationMethod === 'product' && <div className="col-span-1 text-right">Tax %</div>}
-                  {invoiceForm.lineItemPaidEnabled && <div className="col-span-1 text-right">Paid</div>}
-                  <div className="col-span-1" />
+                <div className="mb-0.5 hidden min-w-0 rounded-md border border-border/60 bg-muted/50 px-1.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:flex lg:flex-nowrap lg:items-center lg:gap-2">
+                  <div className="flex w-8 shrink-0 items-center justify-center" aria-hidden>
+                    #
+                  </div>
+                  <div className="min-w-0 flex-1 basis-0 pl-0.5">Description</div>
+                  <div className="w-20 shrink-0 text-right">Qty</div>
+                  <div className="w-[7.5rem] shrink-0 text-right">Fee / Cost (₹)</div>
+                  <div className="w-[7.5rem] shrink-0 text-right">Total</div>
+                  {invoiceForm.lineItemDiscountEnabled && (
+                    <div className="w-[7.5rem] shrink-0 text-right">Discount</div>
+                  )}
+                  {invoiceForm.taxCalculationMethod === 'product' && (
+                    <div className="w-20 shrink-0 text-right">Tax %</div>
+                  )}
+                  {invoiceForm.lineItemPaidEnabled && (
+                    <div className="w-[7.5rem] shrink-0 text-right">Paid</div>
+                  )}
+                  <div className="w-10 shrink-0" aria-hidden />
                 </div>
               )}
               {invoiceForm.items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-12 gap-1 items-center p-2 border border-border rounded-lg bg-background/50"
+                  className="group grid grid-cols-2 gap-2.5 rounded-lg border border-border/80 bg-card p-2.5 shadow-sm transition-[border-color,box-shadow] hover:border-primary/25 hover:shadow-sm sm:gap-3 lg:flex lg:flex-nowrap lg:items-center lg:gap-2 lg:p-2 lg:pl-1.5"
                 >
-                  <div className={lineItemDescColClass}>
+                  <div
+                    className="hidden lg:flex lg:h-9 lg:w-8 lg:shrink-0 lg:items-center lg:justify-center lg:self-center rounded-md bg-muted/40 text-xs font-semibold tabular-nums text-muted-foreground group-hover:bg-muted/60"
+                    aria-label={`Line ${index + 1}`}
+                  >
+                    {index + 1}
+                  </div>
+                  <div className="col-span-2 min-w-0 lg:flex-1 lg:basis-0">
+                    <label className="mb-1 flex items-baseline gap-1.5 lg:hidden">
+                      <span className="text-xs font-medium text-foreground">Description</span>
+                      <span className="text-[11px] text-muted-foreground">· Line {index + 1}</span>
+                    </label>
                     <Input
                       value={item.description}
                       onChange={(e) =>
                         handleItemChange(index, 'description', e.target.value)
                       }
-                      placeholder="Item description"
-                      className="h-9"
+                      placeholder="e.g. Tuition — Term 1"
+                      className="h-9 w-full min-w-0"
                     />
                   </div>
-                  <div className="col-span-1">
+                  <div className="col-span-2 min-w-0 lg:w-20 lg:shrink-0">
+                    <label className="mb-1 block text-xs font-medium text-foreground lg:hidden">Quantity</label>
                     <Input
                       type="number"
                       min="0"
@@ -2208,10 +2246,11 @@ export default function InvoicesPage() {
                           Number(e.target.value),
                         )
                       }
-                      className="h-9"
+                      className="h-9 w-full min-w-0 tabular-nums lg:text-right"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 min-w-0 lg:w-[7.5rem] lg:shrink-0">
+                    <label className="mb-1 block text-xs font-medium text-foreground lg:hidden">Unit price (₹)</label>
                     <Input
                       type="number"
                       min="0"
@@ -2224,21 +2263,23 @@ export default function InvoicesPage() {
                           Number(e.target.value),
                         )
                       }
-                      className="h-9"
+                      className="h-9 w-full min-w-0 tabular-nums lg:text-right"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 min-w-0 lg:w-[7.5rem] lg:shrink-0">
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground lg:hidden">Line total (₹)</label>
                     <Input
                       type="number"
                       min="0"
                       step="0.01"
                       value={item.amount || 0}
                       readOnly
-                      className="h-9 bg-muted"
+                      className="h-9 w-full min-w-0 bg-muted/80 tabular-nums font-medium lg:text-right"
                     />
                   </div>
                   {invoiceForm.lineItemDiscountEnabled && (
-                  <div className="col-span-2">
+                  <div className="col-span-2 min-w-0 lg:w-[7.5rem] lg:shrink-0">
+                    <label className="mb-1 block text-xs font-medium text-foreground lg:hidden">Discount (₹)</label>
                     <Input
                       type="number"
                       min="0"
@@ -2247,12 +2288,13 @@ export default function InvoicesPage() {
                       onChange={(e) =>
                         handleItemChange(index, 'discount', Number(e.target.value))
                       }
-                      className="h-9"
+                      className="h-9 w-full min-w-0 tabular-nums lg:text-right"
                     />
                   </div>
                   )}
                   {invoiceForm.taxCalculationMethod === 'product' && (
-                    <div className="col-span-1">
+                    <div className="col-span-2 min-w-0 lg:w-20 lg:shrink-0">
+                      <label className="mb-1 block text-xs font-medium text-foreground lg:hidden">Tax (%)</label>
                       <Input
                         type="number"
                         min="0"
@@ -2262,13 +2304,14 @@ export default function InvoicesPage() {
                         onChange={(e) =>
                           handleItemChange(index, 'taxRate', Number(e.target.value))
                         }
-                        placeholder="0.00"
-                        className="h-9"
+                        placeholder="0"
+                        className="h-9 w-full min-w-0 tabular-nums lg:text-right"
                       />
                     </div>
                   )}
                   {invoiceForm.lineItemPaidEnabled && (
-                    <div className="col-span-1">
+                    <div className="col-span-2 min-w-0 lg:w-[7.5rem] lg:shrink-0">
+                      <label className="mb-1 block text-xs font-medium text-foreground lg:hidden">Paid on this line (₹)</label>
                       <Input
                         type="number"
                         min="0"
@@ -2281,16 +2324,19 @@ export default function InvoicesPage() {
                             Number(e.target.value),
                           )
                         }
-                        title="Paid for this line (max = line total after discount & tax)"
-                        className="h-9"
+                        title="Cannot exceed this line’s total after discount and tax."
+                        className="h-9 w-full min-w-0 tabular-nums lg:text-right"
                       />
                     </div>
                   )}
-                  <div className="col-span-1 flex justify-end">
+                  <div className="col-span-2 flex justify-end border-t border-border/60 pt-2 lg:w-10 lg:shrink-0 lg:border-t-0 lg:pt-0">
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      aria-label={`Remove line ${index + 1}`}
+                      title="Remove this line"
                       onClick={() => removeItem(index)}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -2299,35 +2345,40 @@ export default function InvoicesPage() {
                 </div>
               ))}
               {invoiceForm.items.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 text-center rounded-lg border border-dashed border-border bg-muted/20">
-                  <Receipt className="h-10 w-10 text-muted-foreground mb-2 opacity-60" />
-                  <p className="text-sm font-medium text-muted-foreground">No line items yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Add at least one item to create the invoice.</p>
-                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={addItem}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Item
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-gradient-to-b from-muted/30 to-muted/10 px-4 py-12 text-center">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                    <Receipt className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground">No lines yet</p>
+                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                    Start with one line per charge. You can turn on per-line tax, discount, or paid columns above when you need them.
+                  </p>
+                  <Button type="button" variant="default" size="sm" className="mt-4 gap-1.5" onClick={addItem}>
+                    <Plus className="h-4 w-4" />
+                    Add first line
                   </Button>
                 </div>
               )}
               </div>
             </section>
+            </div>
 
-            {/* Tax & Totals */}
-            <section className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+            {/* Tax & Totals — sticky on the right on wide screens */}
+            <aside className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-3 lg:z-10 lg:max-h-[calc(100dvh-10rem)] lg:overflow-y-auto lg:self-start">
+            <section className="rounded-xl border border-border bg-card shadow-sm ring-1 ring-border/40 overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
                 <DollarSign className="h-5 w-5 text-primary" />
                 <h3 className="text-base font-semibold">Tax & Totals</h3>
               </div>
               <div className="p-4">
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                  {/* Left: inputs */}
-                  <div className="lg:col-span-2 space-y-4">
+                <div className="flex flex-col gap-5">
+                  <div className="space-y-4">
                     <p className="text-xs text-muted-foreground">
                       {invoiceForm.taxCalculationMethod === 'product'
                         ? 'Using product-level tax from line items.'
                         : 'Using total-level tax (default).'}
                     </p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
                       {invoiceForm.taxCalculationMethod === 'total' && (
                         <div>
                           <label className="block text-sm font-medium mb-1.5">Tax Rate (%)</label>
@@ -2363,9 +2414,9 @@ export default function InvoicesPage() {
                           </p>
                         ) : null}
                       </div>
-                      <div>
+                      <div className="sm:col-span-2 lg:col-span-1">
                         <label className="block text-sm font-medium mb-1.5">Already Paid (₹)</label>
-                        <p style={{fontSize: '10px'}} className=" text-muted-foreground mt-1">This amount will be not recorded in the payment history.</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground">This amount will be not recorded in the payment history.</p>
                         <Input
                           name="paidAmount"
                           type="number"
@@ -2384,28 +2435,26 @@ export default function InvoicesPage() {
                       </div>
                     </div>
                   </div>
-                  {/* Right: Summary */}
-                  <div className="lg:col-span-3 flex flex-col items-end">
-            <div className="p-4 rounded-lg border border-border bg-muted/30 w-full min-w-[240px] max-w-sm">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Summary</p>
               <div className="flex justify-between text-sm mb-1">
                 <span>Subtotal:</span>
-                <span>{formatCurrency(calculateTotals.subtotal)}</span>
+                <span className="tabular-nums">{formatCurrency(calculateTotals.subtotal)}</span>
               </div>
               {invoiceForm.taxCalculationMethod === 'product' ? (
                 <>
                   <div className="flex justify-between text-xs text-muted-foreground mb-2">
                     <span>Tax (Product-Level):</span>
-                    <span>{formatCurrency(calculateTotals.taxAmount)}</span>
+                    <span className="tabular-nums">{formatCurrency(calculateTotals.taxAmount)}</span>
                   </div>
                   {invoiceForm.items.some(item => item.taxRate > 0) && (
                     <div className="text-xs text-muted-foreground mb-2 pl-2 border-l-2 border-border">
                       {invoiceForm.items
                         .filter(item => item.taxRate > 0)
                         .map((item, idx) => (
-                          <div key={idx} className="flex justify-between mb-1">
-                            <span>{item.description || `Item ${idx + 1}`}:</span>
-                            <span>{item.taxRate}% = {formatCurrency(item.taxAmount || 0)}</span>
+                          <div key={idx} className="flex justify-between gap-2 mb-1">
+                            <span className="min-w-0 truncate">{item.description || `Item ${idx + 1}`}:</span>
+                            <span className="shrink-0 tabular-nums">{item.taxRate}% = {formatCurrency(item.taxAmount || 0)}</span>
                           </div>
                         ))}
                     </div>
@@ -2414,35 +2463,36 @@ export default function InvoicesPage() {
               ) : (
                 <div className="flex justify-between text-sm mb-1">
                   <span>Tax ({invoiceForm.taxRate || 0}%):</span>
-                  <span>{formatCurrency(calculateTotals.taxAmount)}</span>
+                  <span className="tabular-nums">{formatCurrency(calculateTotals.taxAmount)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm mb-1">
                 <span>Discount:</span>
-                <span>{formatCurrency(calculateTotals.discount)}</span>
+                <span className="tabular-nums">{formatCurrency(calculateTotals.discount)}</span>
               </div>
               <div className="flex justify-between text-lg font-semibold mt-2 pt-2 border-t border-border">
                 <span>Total Amount:</span>
-                <span>{formatCurrency(calculateTotals.totalAmount)}</span>
+                <span className="tabular-nums">{formatCurrency(calculateTotals.totalAmount)}</span>
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span>Balance:</span>
                 <span
-                  className={
+                  className={`tabular-nums ${
                     calculateTotals.balanceAmount > 0
                       ? 'text-red-600 font-medium'
                       : 'text-green-600 font-medium'
-                  }
+                  }`}
                 >
                   {formatCurrency(calculateTotals.balanceAmount)}
                 </span>
               </div>
-            </div>
                   </div>
                 </div>
               </div>
             </section>
+            </aside>
 
+            <div className="min-w-0 space-y-6 lg:col-start-1 lg:row-start-2">
             {/* Notes & Terms */}
             <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
@@ -2474,8 +2524,8 @@ export default function InvoicesPage() {
                 </div>
               </div>
             </section>
-
-            </>
+            </div>
+            </div>
           )}
 
             </div>
