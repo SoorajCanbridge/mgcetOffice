@@ -201,12 +201,15 @@ export function DataTable({
   pageSizeOptions = [10, 20, 50, 100],
   enableExport = false,
   onExport,
+  showSerialNumber = true,
+  serialNumberLabel = 'Sl.No',
+  serialSortKey = 'createdAt',
   ...props
 }) {
   // State management
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({});
-  const [sortBy, setSortBy] = useState(null);
+  const [sortBy, setSortBy] = useState(showSerialNumber ? '__serial' : null);
   const [sortOrder, setSortOrder] = useState('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
@@ -267,7 +270,7 @@ export function DataTable({
   }, [columns]);
 
   // Process data: search -> filter -> sort
-  const processedData = useMemo(() => {
+  const searchedAndFilteredData = useMemo(() => {
     let result = [...data];
 
     // Apply search
@@ -280,13 +283,43 @@ export function DataTable({
       result = applyFilters(result, filters, columns);
     }
 
-    // Apply sorting
-    if (sortable && sortBy) {
-      result = applySorting(result, sortBy, sortOrder);
+    return result;
+  }, [data, searchQuery, filters, searchable, filterable, searchableColumns, columns]);
+
+  const serialRankMap = useMemo(() => {
+    const rankMap = new WeakMap();
+
+    if (!showSerialNumber) return rankMap;
+
+    const rowsByCreatedAtDesc = [...searchedAndFilteredData].sort((a, b) => {
+      const aTime = new Date(a?.[serialSortKey]).getTime();
+      const bTime = new Date(b?.[serialSortKey]).getTime();
+      const safeATime = Number.isFinite(aTime) ? aTime : 0;
+      const safeBTime = Number.isFinite(bTime) ? bTime : 0;
+      return safeBTime - safeATime;
+    });
+
+    rowsByCreatedAtDesc.forEach((row, index) => {
+      rankMap.set(row, index + 1);
+    });
+
+    return rankMap;
+  }, [searchedAndFilteredData, showSerialNumber, serialSortKey]);
+
+  // Apply sorting after serial ranking is computed.
+  const processedData = useMemo(() => {
+    if (!sortable || !sortBy) return searchedAndFilteredData;
+
+    if (sortBy === '__serial') {
+      return [...searchedAndFilteredData].sort((a, b) => {
+        const aRank = serialRankMap.get(a) ?? Number.MAX_SAFE_INTEGER;
+        const bRank = serialRankMap.get(b) ?? Number.MAX_SAFE_INTEGER;
+        return sortOrder === 'asc' ? aRank - bRank : bRank - aRank;
+      });
     }
 
-    return result;
-  }, [data, searchQuery, filters, sortBy, sortOrder, searchable, filterable, sortable, searchableColumns, columns]);
+    return applySorting(searchedAndFilteredData, sortBy, sortOrder);
+  }, [searchedAndFilteredData, sortable, sortBy, sortOrder, serialRankMap]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(processedData.length / pageSize));
@@ -549,9 +582,24 @@ export function DataTable({
 
       {/* Table */}
       <div className="rounded-md border">
-        <Table>
+        <Table showSerialNumber={false}>
           <TableHeader>
             <TableRow>
+              {showSerialNumber && (
+                <TableHead
+                  className={cn(sortable && 'cursor-pointer select-none')}
+                  onClick={() => sortable && handleSort('__serial')}>
+                  <div className="flex items-center gap-2">
+                    {serialNumberLabel}
+                    {sortable && <ArrowUpDown className="h-4 w-4 text-muted-foreground" />}
+                    {sortBy === '__serial' && (
+                      <span className="text-xs">
+                        {sortOrder === 'asc' ? '↑' : '↓'}
+                      </span>
+                    )}
+                  </div>
+                </TableHead>
+              )}
               {visibleColumnsData.map((column) => {
                 const columnId = column.id || column.accessorKey;
                 const isSorted = sortBy === columnId;
@@ -580,7 +628,9 @@ export function DataTable({
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={visibleColumnsData.length + (actions ? 1 : 0)} className="h-24 text-center">
+                <TableCell
+                  colSpan={visibleColumnsData.length + (showSerialNumber ? 1 : 0) + (actions ? 1 : 0)}
+                  className="h-24 text-center">
                   <div className="flex items-center justify-center gap-2">
                     <RefreshCw className="h-4 w-4 animate-spin" />
                     Loading...
@@ -589,7 +639,9 @@ export function DataTable({
               </TableRow>
             ) : paginatedData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visibleColumnsData.length + (actions ? 1 : 0)} className="h-24 text-center">
+                <TableCell
+                  colSpan={visibleColumnsData.length + (showSerialNumber ? 1 : 0) + (actions ? 1 : 0)}
+                  className="h-24 text-center">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -599,6 +651,11 @@ export function DataTable({
                   key={rowIndex}
                   className={cn(onRowClick && 'cursor-pointer')}
                   onClick={() => onRowClick?.(row)}>
+                  {showSerialNumber && (
+                    <TableCell className="font-medium text-muted-foreground">
+                      {serialRankMap.get(row) ?? '-'}
+                    </TableCell>
+                  )}
                   {visibleColumnsData.map((column) => {
                     const columnId = column.id || column.accessorKey;
                     const cellValue = column.accessorFn

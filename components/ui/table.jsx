@@ -2,14 +2,31 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Table = React.forwardRef(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props} />
-  </div>
-))
+const Table = React.forwardRef(
+  (
+    {
+      className,
+      showSerialNumber = true,
+      serialLabel = "Sl.No",
+      ...props
+    },
+    ref
+  ) => (
+    <div className="relative w-full overflow-auto">
+      <table
+        ref={ref}
+        data-show-serial={showSerialNumber ? "true" : "false"}
+        data-serial-label={serialLabel}
+        className={cn(
+          "w-full caption-bottom text-sm",
+          showSerialNumber &&
+            "[&_thead_tr::before]:table-cell [&_thead_tr::before]:h-10 [&_thead_tr::before]:px-4 [&_thead_tr::before]:text-left [&_thead_tr::before]:align-middle [&_thead_tr::before]:font-medium [&_thead_tr::before]:text-muted-foreground [&_thead_tr::before]:content-[attr(data-serial-label)] [&_tbody]:[counter-reset:rowSerial] [&_tbody_tr]:[counter-increment:rowSerial] [&_tbody_tr::before]:table-cell [&_tbody_tr::before]:p-4 [&_tbody_tr::before]:align-middle [&_tbody_tr::before]:font-medium [&_tbody_tr::before]:text-muted-foreground [&_tbody_tr::before]:content-[counter(rowSerial)]",
+          className
+        )}
+        {...props} />
+    </div>
+  )
+)
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef(({ className, ...props }, ref) => (

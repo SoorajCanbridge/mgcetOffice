@@ -601,7 +601,7 @@ function buildPrintHtml({ expense, expenseId, category, account, college, vouche
       <div class="bc-value">${escapeHtml(formatCurrency(expense.amount ?? 0))}</div>
     </div>
     <div class="banner-cell">
-      <div class="bc-label">Receipt No.</div>
+      <div class="bc-label">Voucher No.</div>
       <div class="bc-value" style="font-family:var(--mono);font-size:18px;font-weight:500;color:var(--ink-2);">${escapeHtml(voucherNum || expense.referenceNumber || expenseId?.slice(-8) || '—')}</div>
       ${expense.referenceNumber ? `<div class="bc-sub">Ref: ${escapeHtml(expense.referenceNumber)}</div>` : ''}
     </div>
