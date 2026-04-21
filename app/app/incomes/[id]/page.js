@@ -9,7 +9,6 @@ import {
   Download,
   Printer,
   RefreshCcw,
-  Edit2,
   CheckCircle2,
   XCircle,
   Receipt,
@@ -480,7 +479,6 @@ export default function IncomeDetailsPage() {
           <button onClick={fetchIncomeDetails} disabled={loading} className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"><RefreshCcw className="h-3.5 w-3.5" /> Refresh</button>
           <button onClick={handleExportCSV} disabled={exporting} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-all duration-150 disabled:opacity-50"><Download className="h-3.5 w-3.5" /> {exporting ? 'Exporting…' : 'Export CSV'}</button>
           <button onClick={handlePrint} className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-all duration-150"><Printer className="h-3.5 w-3.5" /> Print</button>
-          {!income.isCancelled && <button onClick={() => router.push(`/app/finance?editIncome=${incomeId}`)} className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/25 transition-all duration-150"><Edit2 className="h-3.5 w-3.5" /> Edit Income</button>}
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -580,7 +578,7 @@ export default function IncomeDetailsPage() {
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
             <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40"><Receipt className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" /><h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Quick Actions</h3></div>
             <div className="px-4 py-3 space-y-1">
-              {[{ icon: Printer, label: 'Print Receipt', onClick: handlePrint, teal: false }, { icon: Download, label: exporting ? 'Exporting…' : 'Export as CSV', onClick: handleExportCSV, disabled: exporting, teal: false }, ...(!income.isCancelled ? [{ icon: Edit2, label: 'Edit Income', onClick: () => router.push(`/app/finance?editIncome=${incomeId}`), teal: true }] : [])].map(({ icon: Icon, label, onClick, disabled, teal }, i) => (
+              {[{ icon: Printer, label: 'Print Receipt', onClick: handlePrint, teal: false }, { icon: Download, label: exporting ? 'Exporting…' : 'Export as CSV', onClick: handleExportCSV, disabled: exporting, teal: false }].map(({ icon: Icon, label, onClick, disabled, teal }, i) => (
                 <button key={i} onClick={onClick} disabled={disabled} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left group disabled:opacity-50 ${teal ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
                   <div className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${teal ? 'bg-emerald-50 dark:bg-emerald-950/30 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-950/50' : 'bg-slate-100 dark:bg-slate-800 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'}`}>
                     <Icon className={`h-3.5 w-3.5 ${teal ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />

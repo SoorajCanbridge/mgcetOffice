@@ -18,7 +18,6 @@ import {
   FileText,
   Eye,
   Filter,
-  Trash2,
   BookOpen,
   Plus,
 } from 'lucide-react';
@@ -65,12 +64,23 @@ const formatDateForCSV = (date) => {
   }
 };
 
+const ACCOUNT_STATUSES = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'closed', label: 'Closed' },
+  { value: 'frozen', label: 'Frozen' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'archived', label: 'Archived' },
+];
+
 export default function AccountDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuth();
   const accountId = params?.id;
   const printRef = useRef(null);
+  const txAccountRef = useRef(accountId);
 
   const [account, setAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -78,12 +88,20 @@ export default function AccountDetailsPage() {
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
 
   const [dateRange, setDateRange] = useState({
     startDate: '',
     endDate: '',
   });
+
+  const [txPagination, setTxPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    pages: 0,
+  });
+  const [transactionsPageFromApi, setTransactionsPageFromApi] = useState(false);
 
   const fetchAccountDetails = useCallback(async () => {
     if (!accountId || !user?.college) return;
@@ -102,42 +120,121 @@ export default function AccountDetailsPage() {
 
   const fetchTransactions = useCallback(async () => {
     if (!accountId || !user?.college) return;
+    const switchedAccount = txAccountRef.current !== accountId;
+    if (switchedAccount) {
+      txAccountRef.current = accountId;
+    }
+    const requestedPage = switchedAccount ? 1 : txPagination.page;
+    const requestedLimit = switchedAccount ? 20 : txPagination.limit;
     try {
       setTransactionsLoading(true);
-      try {
-        const res = await api.get(`${ACCOUNTS_BASE}/${accountId}/ledgers?limit=20&sortBy=entryDate&sortOrder=desc`, {}, true);
+      if (switchedAccount) {
+        setTransactions([]);
+        setTransactionsPageFromApi(false);
+        setTxPagination({ page: 1, limit: 20, total: 0, pages: 0 });
+      }
+
+      const applyResponse = (res, pageNum, limitNum) => {
         const data = res?.data ?? res ?? [];
-        setTransactions(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setTransactions(list);
+        const p = res?.pagination;
+        const hasPaginationMeta =
+          p &&
+          typeof p === 'object' &&
+          (typeof p.total === 'number' ||
+            (typeof p.pages === 'number' && p.pages >= 1));
+        if (hasPaginationMeta) {
+          setTransactionsPageFromApi(true);
+          setTxPagination((prev) => ({
+            ...prev,
+            ...p,
+            page: p.page ?? pageNum,
+            limit: p.limit ?? p.pageSize ?? prev.limit ?? limitNum,
+            total: typeof p.total === 'number' ? p.total : prev.total,
+            pages: typeof p.pages === 'number' ? p.pages : prev.pages,
+          }));
+        } else {
+          setTransactionsPageFromApi(false);
+          const total = list.length;
+          const pages = Math.max(1, Math.ceil(total / limitNum) || 1);
+          setTxPagination({
+            page: Math.min(pageNum, pages),
+            limit: limitNum,
+            total,
+            pages,
+          });
+        }
+      };
+
+      const primaryParams = new URLSearchParams();
+      primaryParams.set('page', String(requestedPage));
+      primaryParams.set('limit', String(requestedLimit));
+      primaryParams.set('sortBy', 'entryDate');
+      primaryParams.set('sortOrder', 'desc');
+      if (dateRange.startDate) primaryParams.set('startDate', dateRange.startDate);
+      if (dateRange.endDate) primaryParams.set('endDate', dateRange.endDate);
+
+      try {
+        const res = await api.get(
+          `${ACCOUNTS_BASE}/${accountId}/ledgers?${primaryParams.toString()}`,
+          {},
+          true,
+        );
+        applyResponse(res, requestedPage, requestedLimit);
       } catch {
         const params = new URLSearchParams();
         params.append('accountId', accountId);
+        params.set('page', String(requestedPage));
+        params.set('limit', String(requestedLimit));
+        params.set('sortBy', 'entryDate');
+        params.set('sortOrder', 'desc');
         if (dateRange.startDate) params.append('startDate', dateRange.startDate);
         if (dateRange.endDate) params.append('endDate', dateRange.endDate);
         const response = await api.get(`${LEDGERS_BASE}?${params.toString()}`, {}, true);
-        const data = response?.data || response || [];
-        setTransactions(Array.isArray(data) ? data : []);
+        applyResponse(response, requestedPage, requestedLimit);
       }
     } catch (err) {
       console.error('Failed to load transactions:', err);
       setTransactions([]);
+      setTransactionsPageFromApi(false);
+      setTxPagination((prev) => ({ ...prev, total: 0, pages: 1 }));
     } finally {
       setTransactionsLoading(false);
     }
-  }, [accountId, user?.college, dateRange.startDate, dateRange.endDate]);
+  }, [
+    accountId,
+    user?.college,
+    dateRange.startDate,
+    dateRange.endDate,
+    txPagination.page,
+    txPagination.limit,
+  ]);
 
-  const handleDeleteAccount = useCallback(async () => {
-    if (!accountId || !window.confirm('Delete this account? This cannot be undone.')) return;
-    try {
-      setDeleting(true);
-      setError('');
-      await api.delete(`${ACCOUNTS_BASE}/${accountId}`, {}, true);
-      router.push('/app/accounts');
-    } catch (err) {
-      setError(err.message || 'Failed to delete account');
-    } finally {
-      setDeleting(false);
-    }
-  }, [accountId, router]);
+  const handleStatusChange = useCallback(
+    async (newStatus) => {
+      if (!accountId || !newStatus || newStatus === account?.status) return;
+      const previousStatus = account?.status;
+      try {
+        setStatusSaving(true);
+        setError('');
+        setAccount((prev) => (prev ? { ...prev, status: newStatus } : prev));
+        await api.put(`${ACCOUNTS_BASE}/${accountId}`, { status: newStatus }, {}, true);
+      } catch (err) {
+        setError(err.message || 'Failed to update account status');
+        setAccount((prev) => (prev ? { ...prev, status: previousStatus } : prev));
+        try {
+          const response = await api.get(`${ACCOUNTS_BASE}/${accountId}`, {}, true);
+          setAccount(response?.data || response);
+        } catch {
+          /* ignore */
+        }
+      } finally {
+        setStatusSaving(false);
+      }
+    },
+    [accountId, account?.status],
+  );
 
   useEffect(() => {
     if (!user?.college) return;
@@ -162,6 +259,22 @@ export default function AccountDetailsPage() {
       return [{ ...ledger, transactionType: line.transactionType, amount: line.amount, balance: line.balanceAfter }];
     });
   }, [transactions, accountId]);
+
+  const statementIncomplete = useMemo(
+    () =>
+      transactionsPageFromApi &&
+      typeof txPagination.total === 'number' &&
+      txPagination.total > transactionsForAccount.length,
+    [transactionsPageFromApi, txPagination.total, transactionsForAccount.length],
+  );
+
+  const displayedTransactionCount = useMemo(
+    () =>
+      transactionsPageFromApi && typeof txPagination.total === 'number'
+        ? txPagination.total
+        : transactionsForAccount.length,
+    [transactionsPageFromApi, txPagination.total, transactionsForAccount.length],
+  );
 
   const stats = useMemo(() => {
     const credits = transactionsForAccount
@@ -543,17 +656,21 @@ export default function AccountDetailsPage() {
                   Default
                 </span>
               )}
-              <span
-                className={`text-xs px-2 py-1 rounded capitalize ${
-                  account.status === 'active'
-                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                    : account.status === 'inactive'
-                    ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
-                    : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {account.status}
-              </span>
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground whitespace-nowrap">Status</span>
+                <select
+                  className="h-8 min-w-[9rem] rounded-md border border-input bg-background px-2 text-xs capitalize focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  value={account.status || 'active'}
+                  disabled={statusSaving}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                >
+                  {ACCOUNT_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <p className="text-muted-foreground mt-2">
               {account.accountType && (
@@ -582,7 +699,12 @@ export default function AccountDetailsPage() {
             variant="outline"
             onClick={handleDownloadStatement}
             className="gap-2"
-            disabled={exporting || transactionsForAccount.length === 0}
+            disabled={exporting || transactionsForAccount.length === 0 || statementIncomplete}
+            title={
+              statementIncomplete
+                ? 'CSV includes only the current page. Open Ledgers (this account) for a full export.'
+                : undefined
+            }
           >
             <Download className="h-4 w-4" />
             {exporting ? 'Exporting...' : 'Download Statement'}
@@ -591,17 +713,22 @@ export default function AccountDetailsPage() {
             variant="outline"
             onClick={handlePrintStatement}
             className="gap-2"
-            disabled={transactionsForAccount.length === 0}
+            disabled={transactionsForAccount.length === 0 || statementIncomplete}
+            title={
+              statementIncomplete
+                ? 'Print includes only the current page. Open Ledgers (this account) for the full statement.'
+                : undefined
+            }
           >
             <Printer className="h-4 w-4" />
             Print Statement
           </Button>
-          <Link href={`/app/accounts/${accountId}/ledger`}>
+          {/* <Link href={`/app/ledgers?accountId=${accountId}`}>
             <Button variant="outline" className="gap-2">
               <BookOpen className="h-4 w-4" />
-              View all ledger
+              View in ledgers
             </Button>
-          </Link>
+          </Link> */}
           <Button
             variant="default"
             onClick={() => router.push(`/app/accounts?edit=${accountId}`)}
@@ -609,15 +736,6 @@ export default function AccountDetailsPage() {
           >
             <Edit2 className="h-4 w-4" />
             Edit
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDeleteAccount}
-            disabled={deleting}
-            className="gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            {deleting ? 'Deleting...' : 'Delete'}
           </Button>
         </div>
       </div>
@@ -716,12 +834,17 @@ export default function AccountDetailsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Transactions</p>
-              <p className="text-2xl font-bold mt-1">{stats.count}</p>
+              <p className="text-2xl font-bold mt-1">{displayedTransactionCount}</p>
             </div>
             <FileText className="h-8 w-8 text-primary opacity-50" />
           </div>
         </div>
       </div>
+      {statementIncomplete && (
+        <p className="text-xs text-muted-foreground -mt-2">
+          Credit and debit totals below reflect this page only. Total transaction count is from the server.
+        </p>
+      )}
 
       {/* Date Range Filter */}
       <div className="bg-card border border-border rounded-lg p-4">
@@ -733,9 +856,10 @@ export default function AccountDetailsPage() {
               <Input
                 type="date"
                 value={dateRange.startDate}
-                onChange={(e) =>
-                  setDateRange((prev) => ({ ...prev, startDate: e.target.value }))
-                }
+                onChange={(e) => {
+                  setDateRange((prev) => ({ ...prev, startDate: e.target.value }));
+                  setTxPagination((p) => ({ ...p, page: 1 }));
+                }}
               />
             </div>
             <div>
@@ -743,15 +867,19 @@ export default function AccountDetailsPage() {
               <Input
                 type="date"
                 value={dateRange.endDate}
-                onChange={(e) =>
-                  setDateRange((prev) => ({ ...prev, endDate: e.target.value }))
-                }
+                onChange={(e) => {
+                  setDateRange((prev) => ({ ...prev, endDate: e.target.value }));
+                  setTxPagination((p) => ({ ...p, page: 1 }));
+                }}
               />
             </div>
             <div className="flex items-end">
               <Button
                 variant="outline"
-                onClick={() => setDateRange({ startDate: '', endDate: '' })}
+                onClick={() => {
+                  setDateRange({ startDate: '', endDate: '' });
+                  setTxPagination((p) => ({ ...p, page: 1 }));
+                }}
                 className="w-full"
               >
                 Clear Filter
@@ -766,24 +894,27 @@ export default function AccountDetailsPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Transactions</h2>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {transactionsForAccount.length} transaction{transactionsForAccount.length !== 1 ? 's' : ''}
-            </span>
-            <Link href={`/app/accounts/${accountId}/ledger`}>
+            {/* <span className="text-sm text-muted-foreground">
+              {displayedTransactionCount} transaction{displayedTransactionCount !== 1 ? 's' : ''}
+              {statementIncomplete ? ' (loaded page)' : ''}
+            </span> */}
+            {/* <Link href={`/app/ledgers?accountId=${accountId}`}>
               <Button variant="ghost" size="sm" className="gap-1">
                 <BookOpen className="h-4 w-4" />
-                View all
+                View in ledgers
               </Button>
-            </Link>
-            <Link href={`/app/ledgers?accountId=${accountId}`}>
+            </Link> */}
+            {/* <Link href={`/app/ledgers?accountId=${accountId}`}>
               <Button variant="outline" size="sm" className="gap-1">
                 <Plus className="h-4 w-4" />
                 Add ledger entry
               </Button>
-            </Link>
+            </Link> */}
           </div>
         </div>
-        {transactionsForAccount.length === 0 && !transactionsLoading ? (
+        {transactionsForAccount.length === 0 &&
+        !transactionsLoading &&
+        (!transactionsPageFromApi || (txPagination.total ?? 0) === 0) ? (
           <div className="text-center py-12 border border-dashed rounded-lg">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-2">No transactions yet</p>
@@ -810,6 +941,18 @@ export default function AccountDetailsPage() {
             defaultPageSize={20}
             pageSizeOptions={[10, 20, 50, 100]}
             emptyMessage="No transactions found for this account"
+            {...(transactionsPageFromApi
+              ? {
+                  pagination: {
+                    page: txPagination.page,
+                    limit: txPagination.limit,
+                    total: txPagination.total,
+                    pages: txPagination.pages,
+                  },
+                  onPaginationChange: ({ page, pageSize }) =>
+                    setTxPagination((p) => ({ ...p, page, limit: pageSize })),
+                }
+              : {})}
           />
         )}
       </div>

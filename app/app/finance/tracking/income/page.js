@@ -12,7 +12,6 @@ import {
   Search,
   RefreshCcw,
   Eye,
-  Edit2,
   MoreVertical,
   XCircle,
   Save,
@@ -105,7 +104,6 @@ export default function FinanceTrackingIncomePage() {
   });
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_INCOME);
-  const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -198,7 +196,6 @@ export default function FinanceTrackingIncomePage() {
 
   const resetForm = () => {
     setForm(EMPTY_INCOME);
-    setEditingId(null);
     setShowForm(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -263,13 +260,8 @@ export default function FinanceTrackingIncomePage() {
         isCancelled: !!form.isCancelled,
         ...(hasRecipient ? { recipient: recipientPayload } : {}),
       };
-      if (editingId) {
-        await api.put(`${FINANCE_BASE}/incomes/${editingId}`, payload, {}, true);
-        showSuccess('Income updated.');
-      } else {
-        await api.post(`${FINANCE_BASE}/incomes`, payload, {}, true);
-        showSuccess('Income recorded.');
-      }
+      await api.post(`${FINANCE_BASE}/incomes`, payload, {}, true);
+      showSuccess('Income recorded.');
       resetForm();
       fetchIncomes();
     } catch (err) {
@@ -277,27 +269,6 @@ export default function FinanceTrackingIncomePage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleEdit = (row) => {
-    setEditingId(row._id);
-    const rec = row.recipient && typeof row.recipient === 'object' ? row.recipient : {};
-    const hasRec = !!(rec.name || rec.phone || rec.email || rec.address);
-    setForm({
-      title: row.title || '',
-      amount: row.amount ?? '',
-      date: formatDateForInput(row.date),
-      category: row.category?._id || row.category || '',
-      account: row.account?._id || row.account || '',
-      student: row.student?._id || row.student || '',
-      referenceNumber: row.referenceNumber || '',
-      notes: row.notes || '',
-      files: Array.isArray(row.files) ? [...row.files] : [],
-      isCancelled: row.isCancelled ?? false,
-      haveRecipient: hasRec,
-      recipient: { name: rec.name || '', phone: rec.phone || '', email: rec.email || '', address: rec.address || '' },
-    });
-    setShowForm(true);
   };
 
   const handleCancel = async (row) => {
@@ -378,12 +349,6 @@ export default function FinanceTrackingIncomePage() {
             <Eye className="h-4 w-4 mr-2" />
             View
           </DropdownMenuItem>
-          <PermissionGate moduleKey="finance" action="edit">
-            <DropdownMenuItem onClick={() => handleEdit(row)}>
-              <Edit2 className="h-4 w-4 mr-2" />
-              Edit
-            </DropdownMenuItem>
-          </PermissionGate>
           <PermissionGate moduleKey="finance" action="delete">
             <DropdownMenuItem
               onClick={() => handleCancel(row)}
@@ -471,12 +436,12 @@ export default function FinanceTrackingIncomePage() {
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Income' : 'New Income'}</DialogTitle>
+            <DialogTitle>New Income</DialogTitle>
             <DialogDescription>
-              {editingId ? 'Update income details and recipient.' : 'Record new income. Optionally add recipient details first.'}
+              Record new income. Optionally add recipient details first.
             </DialogDescription>
           </DialogHeader>
-          <PermissionGate moduleKey="finance" action={editingId ? 'edit' : 'create'}>
+          <PermissionGate moduleKey="finance" action="create">
           <form onSubmit={handleSave} className="space-y-5 mt-2">
             {/* Recipient — top */}
             <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -567,7 +532,7 @@ export default function FinanceTrackingIncomePage() {
               </Button>
               <Button type="submit" disabled={saving} className="gap-2">
                 <Save className="h-4 w-4" />
-                {saving ? 'Saving...' : editingId ? 'Update Income' : 'Create Income'}
+                {saving ? 'Saving...' : 'Create Income'}
               </Button>
             </div>
           </form>

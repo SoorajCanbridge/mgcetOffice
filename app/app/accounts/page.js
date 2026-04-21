@@ -764,10 +764,10 @@ export default function AccountsPage() {
 
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               {editingAccount && (
-                <Link href={`/app/accounts/${editingAccount._id}/ledger`} className="mr-auto">
+                <Link href={`/app/ledgers?accountId=${editingAccount._id}`} className="mr-auto">
                   <Button type="button" variant="ghost" className="gap-2">
                     <BookOpen className="h-4 w-4" />
-                    View ledger
+                    View in ledgers
                   </Button>
                 </Link>
               )}

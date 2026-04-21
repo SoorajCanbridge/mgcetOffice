@@ -182,10 +182,12 @@ const applySearch = (data, searchQuery, searchableColumns) => {
   });
 };
 
+/** Server pagination: pass `pagination` ({ page, pageSize|limit, total?, pages? }) and `onPaginationChange({ page, pageSize })`; parent fetches each page into `data`. */
 export function DataTable({
   data = [],
   columns = [],
-  pagination: paginationProp = {},
+  pagination: paginationProp = null,
+  onPaginationChange,
   searchable = true,
   filterable = true,
   sortable = true,
@@ -206,6 +208,13 @@ export function DataTable({
   serialSortKey = 'createdAt',
   ...props
 }) {
+  const serverPag = paginationProp && typeof paginationProp === 'object' ? paginationProp : null;
+  const isServerPagination =
+    typeof onPaginationChange === 'function' &&
+    serverPag &&
+    (typeof serverPag.total === 'number' ||
+      (typeof serverPag.pages === 'number' && serverPag.pages >= 1));
+
   // State management
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({});
@@ -243,21 +252,23 @@ export function DataTable({
     const storedSortBy = localStorage.getItem(`${storageKey}_sortBy`);
     const storedSortOrder = localStorage.getItem(`${storageKey}_sortOrder`);
 
-    if (storedPageSize) setPageSize(Number(storedPageSize));
+    if (!isServerPagination && storedPageSize) setPageSize(Number(storedPageSize));
     if (storedSortBy) setSortBy(storedSortBy);
     if (storedSortOrder) setSortOrder(storedSortOrder);
-  }, [storageKey]);
+  }, [storageKey, isServerPagination]);
 
   // Save settings to localStorage
   useEffect(() => {
     if (!storageKey || typeof window === 'undefined') return;
-    localStorage.setItem(`${storageKey}_pageSize`, String(pageSize));
+    if (!isServerPagination) {
+      localStorage.setItem(`${storageKey}_pageSize`, String(pageSize));
+    }
     localStorage.setItem(`${storageKey}_visibleColumns`, JSON.stringify(visibleColumns));
     if (sortBy) {
       localStorage.setItem(`${storageKey}_sortBy`, sortBy);
       localStorage.setItem(`${storageKey}_sortOrder`, sortOrder);
     }
-  }, [pageSize, visibleColumns, sortBy, sortOrder, storageKey]);
+  }, [pageSize, visibleColumns, sortBy, sortOrder, storageKey, isServerPagination]);
 
   // Get searchable columns
   const searchableColumns = useMemo(() => {
@@ -321,16 +332,40 @@ export function DataTable({
     return applySorting(searchedAndFilteredData, sortBy, sortOrder);
   }, [searchedAndFilteredData, sortable, sortBy, sortOrder, serialRankMap]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(processedData.length / pageSize));
-  const paginatedData = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
-    return processedData.slice(start, end);
-  }, [processedData, page, pageSize]);
+  const serverPageSize = useMemo(() => {
+    if (!serverPag) return defaultPageSize;
+    const raw = Number(serverPag.pageSize ?? serverPag.limit ?? defaultPageSize);
+    return Number.isFinite(raw) && raw > 0 ? raw : defaultPageSize;
+  }, [serverPag, defaultPageSize]);
 
-  // Keep page index valid when the dataset size changes.
+  const effectivePageSize = isServerPagination ? serverPageSize : pageSize;
+  const effectivePage = isServerPagination
+    ? Math.max(1, Number(serverPag.page) || 1)
+    : page;
+
+  // Pagination
+  const totalPages = useMemo(() => {
+    if (isServerPagination && serverPag) {
+      if (typeof serverPag.pages === 'number' && serverPag.pages >= 1) {
+        return serverPag.pages;
+      }
+      if (typeof serverPag.total === 'number') {
+        return Math.max(1, Math.ceil(serverPag.total / effectivePageSize) || 1);
+      }
+    }
+    return Math.max(1, Math.ceil(processedData.length / effectivePageSize));
+  }, [isServerPagination, serverPag, processedData.length, effectivePageSize]);
+
+  const paginatedData = useMemo(() => {
+    if (isServerPagination) return processedData;
+    const start = (effectivePage - 1) * effectivePageSize;
+    const end = start + effectivePageSize;
+    return processedData.slice(start, end);
+  }, [isServerPagination, processedData, effectivePage, effectivePageSize]);
+
+  // Keep page index valid when the dataset size changes (client pagination only).
   useEffect(() => {
+    if (isServerPagination) return;
     if (page > totalPages) {
       setPage(totalPages);
       return;
@@ -338,7 +373,7 @@ export function DataTable({
     if (page < 1) {
       setPage(1);
     }
-  }, [page, totalPages]);
+  }, [isServerPagination, page, totalPages]);
 
   // Handle sorting
   const handleSort = useCallback((columnId) => {
@@ -350,19 +385,33 @@ export function DataTable({
     }
   }, [sortBy, sortOrder]);
 
+  const serverPageSizeFromProp = useCallback(() => {
+    const p = paginationProp && typeof paginationProp === 'object' ? paginationProp : null;
+    if (!p) return defaultPageSize;
+    const raw = Number(p.pageSize ?? p.limit ?? defaultPageSize);
+    return Number.isFinite(raw) && raw > 0 ? raw : defaultPageSize;
+  }, [paginationProp, defaultPageSize]);
+
   // Handle filter change
-  const handleFilterChange = useCallback((columnId, value) => {
-    setFilters((prev) => {
-      const newFilters = { ...prev };
-      if (value === '' || value === null || (Array.isArray(value) && value.length === 0)) {
-        delete newFilters[columnId];
+  const handleFilterChange = useCallback(
+    (columnId, value) => {
+      setFilters((prev) => {
+        const newFilters = { ...prev };
+        if (value === '' || value === null || (Array.isArray(value) && value.length === 0)) {
+          delete newFilters[columnId];
+        } else {
+          newFilters[columnId] = value;
+        }
+        return newFilters;
+      });
+      if (isServerPagination) {
+        onPaginationChange({ page: 1, pageSize: serverPageSizeFromProp() });
       } else {
-        newFilters[columnId] = value;
+        setPage(1);
       }
-      setPage(1); // Reset to first page on filter change
-      return newFilters;
-    });
-  }, []);
+    },
+    [isServerPagination, onPaginationChange, serverPageSizeFromProp],
+  );
 
   // Handle column visibility toggle
   const toggleColumnVisibility = useCallback((columnId) => {
@@ -378,8 +427,12 @@ export function DataTable({
   const resetFilters = useCallback(() => {
     setFilters({});
     setSearchQuery('');
-    setPage(1);
-  }, []);
+    if (isServerPagination) {
+      onPaginationChange({ page: 1, pageSize: serverPageSizeFromProp() });
+    } else {
+      setPage(1);
+    }
+  }, [isServerPagination, onPaginationChange, serverPageSizeFromProp]);
 
   // Get visible columns
   const visibleColumnsData = useMemo(() => {
@@ -487,7 +540,11 @@ export function DataTable({
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setPage(1);
+                  if (isServerPagination) {
+                    onPaginationChange({ page: 1, pageSize: serverPageSizeFromProp() });
+                  } else {
+                    setPage(1);
+                  }
                 }}
                 className="pl-8"
               />
@@ -574,8 +631,23 @@ export function DataTable({
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>
-            Showing {paginatedData.length > 0 ? (page - 1) * pageSize + 1 : 0} to{' '}
-            {Math.min(page * pageSize, processedData.length)} of {processedData.length} entries
+            {(() => {
+              const rangeStart =
+                paginatedData.length > 0 ? (effectivePage - 1) * effectivePageSize + 1 : 0;
+              const rangeEnd =
+                paginatedData.length > 0 ? rangeStart + paginatedData.length - 1 : 0;
+              const totalForLabel = isServerPagination
+                ? typeof serverPag?.total === 'number'
+                  ? serverPag.total
+                  : null
+                : processedData.length;
+              return (
+                <>
+                  Showing {rangeStart} to {rangeEnd}
+                  {totalForLabel !== null ? ` of ${totalForLabel} entries` : ' entries'}
+                </>
+              );
+            })()}
           </span>
         </div>
       </div>
@@ -683,14 +755,21 @@ export function DataTable({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {(isServerPagination || totalPages > 1) && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <p className="text-sm text-muted-foreground">Rows per page</p>
-            <Select value={String(pageSize)} onValueChange={(value) => {
-              setPageSize(Number(value));
-              setPage(1);
-            }}>
+            <Select
+              value={String(effectivePageSize)}
+              onValueChange={(value) => {
+                const num = Number(value);
+                if (isServerPagination) {
+                  onPaginationChange({ page: 1, pageSize: num });
+                } else {
+                  setPageSize(num);
+                  setPage(1);
+                }
+              }}>
               <SelectTrigger className="h-8 w-[70px]">
                 <SelectValue />
               </SelectTrigger>
@@ -706,35 +785,65 @@ export function DataTable({
 
           <div className="flex items-center gap-2">
             <p className="text-sm text-muted-foreground">
-              Page {page} of {totalPages}
+              Page {effectivePage} of {totalPages}
             </p>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(1)}
-                disabled={page === 1}>
+                onClick={() => {
+                  if (isServerPagination) {
+                    onPaginationChange({ page: 1, pageSize: effectivePageSize });
+                  } else {
+                    setPage(1);
+                  }
+                }}
+                disabled={effectivePage === 1}>
                 <ChevronsLeft className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}>
+                onClick={() => {
+                  if (isServerPagination) {
+                    onPaginationChange({
+                      page: Math.max(1, effectivePage - 1),
+                      pageSize: effectivePageSize,
+                    });
+                  } else {
+                    setPage((p) => Math.max(1, p - 1));
+                  }
+                }}
+                disabled={effectivePage === 1}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}>
+                onClick={() => {
+                  if (isServerPagination) {
+                    onPaginationChange({
+                      page: Math.min(totalPages, effectivePage + 1),
+                      pageSize: effectivePageSize,
+                    });
+                  } else {
+                    setPage((p) => Math.min(totalPages, p + 1));
+                  }
+                }}
+                disabled={effectivePage === totalPages}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage(totalPages)}
-                disabled={page === totalPages}>
+                onClick={() => {
+                  if (isServerPagination) {
+                    onPaginationChange({ page: totalPages, pageSize: effectivePageSize });
+                  } else {
+                    setPage(totalPages);
+                  }
+                }}
+                disabled={effectivePage === totalPages}>
                 <ChevronsRight className="h-4 w-4" />
               </Button>
             </div>

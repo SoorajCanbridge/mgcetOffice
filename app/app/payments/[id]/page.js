@@ -85,6 +85,136 @@ const RECEIPT_PRINT_STYLES = `
   }
   .pr-copy { margin-bottom: 10px; }
   .pr-copy + .pr-copy { page-break-before: always; break-before: page; }
+  /* Two identical receipts on one A4 — compact layout; overflow flows to next page */
+  body.pr-print-two-on-one { font-size: 8px; line-height: 1.22; }
+  body.pr-print-two-on-one .pr-copy {
+    margin-bottom: 0;
+    /* Prefer each receipt as one unit; UA may break inside if taller than one page */
+    break-inside: avoid-page;
+  }
+  body.pr-print-two-on-one .pr-copy + .pr-copy {
+    page-break-before: auto;
+    break-before: auto;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 2px dashed var(--pr-faint);
+  }
+  body.pr-print-two-on-one .pr-accent { height: 2px; }
+  body.pr-print-two-on-one .pr-logo,
+  body.pr-print-two-on-one .pr-logo-ph {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  body.pr-print-two-on-one .pr-head {
+    gap: 8px;
+    padding: 5px 8px 4px;
+  }
+  body.pr-print-two-on-one .pr-head-left { gap: 6px; }
+  body.pr-print-two-on-one .pr-inst { font-size: 11px; letter-spacing: -0.015em; }
+  body.pr-print-two-on-one .pr-inst-line { font-size: 7px; margin-top: 1px; line-height: 1.25; }
+  body.pr-print-two-on-one .pr-doc-label { font-size: 6.5px; margin-bottom: 1px; }
+  body.pr-print-two-on-one .pr-doc-num { font-size: 14px; }
+  body.pr-print-two-on-one .pr-doc-date { font-size: 7px; margin-top: 2px; }
+  body.pr-print-two-on-one .pr-badge { margin-top: 3px; padding: 2px 6px; font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-strip {
+    gap: 4px 5px;
+    padding: 3px 8px;
+    font-size: 7.5px;
+  }
+  body.pr-print-two-on-one .pr-chip { padding: 2px 5px; gap: 3px; border-radius: 4px; }
+  body.pr-print-two-on-one .pr-chip-k { font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-title-center { display: none; }
+  body.pr-print-two-on-one .pr-body { padding: 5px 8px 5px; }
+  body.pr-print-two-on-one .pr-grid { gap: 5px; margin-bottom: 5px; }
+  body.pr-print-two-on-one .pr-panel { padding: 5px 7px; border-radius: 5px; }
+  body.pr-print-two-on-one .pr-panel-h { font-size: 6.5px; margin-bottom: 3px; }
+  body.pr-print-two-on-one .pr-payee-name { font-size: 9px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-dl > div {
+    grid-template-columns: 58px 1fr;
+    gap: 2px 5px;
+    font-size: 7.5px;
+    padding: 1px 0;
+  }
+  body.pr-print-two-on-one .pr-amount-panel { padding: 5px 6px; border-radius: 5px; }
+  body.pr-print-two-on-one .pr-above-amount {
+    gap: 6px 12px;
+    margin-bottom: 4px;
+    padding-bottom: 4px;
+  }
+  body.pr-print-two-on-one .pr-above-k { font-size: 6px; margin-bottom: 0; }
+  body.pr-print-two-on-one .pr-above-v { font-size: 8px; }
+  body.pr-print-two-on-one .pr-amount-label { font-size: 6px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-amount-val { font-size: 15px; }
+  body.pr-print-two-on-one .pr-subblock { margin-top: 4px; padding-top: 4px; }
+  body.pr-print-two-on-one .pr-subblock-h { font-size: 6px; margin-bottom: 3px; }
+  body.pr-print-two-on-one .pr-mini-row { font-size: 7px; padding: 2px 0; gap: 5px; }
+  body.pr-print-two-on-one .pr-summary-alloc-grid,
+  body.pr-print-two-on-one .pr-invoice-summary-row {
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+  body.pr-print-two-on-one .pr-block { margin-bottom: 5px; }
+  body.pr-print-two-on-one .pr-block-h {
+    font-size: 6.5px;
+    margin-bottom: 3px;
+    gap: 4px;
+  }
+  body.pr-print-two-on-one .pr-block-h::before { width: 2px; height: 8px; }
+  body.pr-print-two-on-one .pr-data-table { font-size: 7.5px; border-radius: 4px; }
+  body.pr-print-two-on-one .pr-data-table thead th {
+    padding: 2px 4px;
+    font-size: 6px;
+  }
+  body.pr-print-two-on-one .pr-data-table tbody td { padding: 2px 4px; }
+  body.pr-print-two-on-one .pr-data-table tfoot td { padding: 3px 4px; font-size: 7px; }
+  body.pr-print-two-on-one .pr-data-table--wide { font-size: 7px; }
+  body.pr-print-two-on-one .pr-compact-alloc { font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-compact-alloc thead th,
+  body.pr-print-two-on-one .pr-compact-alloc tbody td,
+  body.pr-print-two-on-one .pr-compact-alloc tfoot td { padding: 2px 3px !important; }
+  body.pr-print-two-on-one .pr-warn { margin-top: 3px; padding: 3px 5px; font-size: 7px; }
+  body.pr-print-two-on-one .pr-invoice-bar {
+    gap: 5px 10px;
+    padding: 3px 7px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+  }
+  body.pr-print-two-on-one .pr-invoice-bar strong { font-size: 8px; }
+  body.pr-print-two-on-one .pr-invoice-bar span { font-size: 7px; }
+  body.pr-print-two-on-one .pr-ledger {
+    max-width: 200px;
+    margin-bottom: 4px;
+    border-radius: 5px;
+  }
+  body.pr-print-two-on-one .pr-ledger table { font-size: 7.5px; }
+  body.pr-print-two-on-one .pr-ledger tr td { padding: 3px 6px; }
+  body.pr-print-two-on-one .pr-ledger tr td:first-child { font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-ledger tr.pr-ledger-total td {
+    font-size: 7.5px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+  body.pr-print-two-on-one .pr-notes {
+    padding: 4px 6px;
+    font-size: 7.5px;
+    line-height: 1.25;
+    border-radius: 4px;
+  }
+  body.pr-print-two-on-one .pr-notes-h { font-size: 6px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-footer { padding: 4px 8px 5px; }
+  body.pr-print-two-on-one .pr-footer-thanks { font-size: 8px; margin-bottom: 1px; }
+  body.pr-print-two-on-one .pr-footer-sub { font-size: 6.5px; line-height: 1.2; }
+  body.pr-print-two-on-one .pr-footer-row { margin-top: 3px; font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-footer-row--compact {
+    margin-top: 0;
+    justify-content: center;
+    text-align: center;
+    font-weight: 600;
+    color: var(--pr-muted);
+    line-height: 1.25;
+  }
   .pr-sheet {
     background: #fff;
     border-radius: 10px;
@@ -289,6 +419,29 @@ const RECEIPT_PRINT_STYLES = `
     .print-container { padding: 0; max-width: 100%; width: 100%; }
     .pr-sheet { box-shadow: none; border-radius: 0; border: none; }
     .pr-grid { gap: 8px; }
+    body.pr-print-two-on-one {
+      font-size: 7.25px;
+      line-height: 1.58;
+    }
+    body.pr-print-two-on-one .pr-doc-num { font-size: 13px; }
+    body.pr-print-two-on-one .pr-amount-val { font-size: 13px; }
+    body.pr-print-two-on-one .pr-inst { font-size: 10px; }
+    body.pr-print-two-on-one .pr-head { padding: 4px 6px 3px; }
+    body.pr-print-two-on-one .pr-body { padding: 4px 6px 4px; }
+    body.pr-print-two-on-one .pr-grid { gap: 4px; margin-bottom: 4px; }
+    body.pr-print-two-on-one .pr-panel { padding: 4px 6px; }
+    body.pr-print-two-on-one .pr-block { margin-bottom: 4px; }
+    body.pr-print-two-on-one .pr-summary-alloc-grid,
+    body.pr-print-two-on-one .pr-invoice-summary-row { gap: 4px; margin-bottom: 4px; }
+    body.pr-print-two-on-one .pr-data-table thead th { padding: 1px 3px; }
+    body.pr-print-two-on-one .pr-data-table tbody td { padding: 1px 3px; }
+    body.pr-print-two-on-one .pr-data-table tfoot td { padding: 2px 3px; }
+    body.pr-print-two-on-one .pr-copy + .pr-copy {
+      margin-top: 6mm;
+      padding-top: 5mm;
+      border-top-width: 2px;
+    }
+    body.pr-print-two-on-one .pr-footer { padding: 3px 6px 4px; }
     @page { margin: 8mm; size: A4 portrait; }
   }
 `;
@@ -444,7 +597,7 @@ export default function PaymentDetailsPage() {
     } catch { alert('Failed to export CSV'); } finally { setExporting(false); }
   }, [payment, student, invoice, amountSplits, hasAmountSplits, paymentId]);
 
-  const getPrintBodyHtml = useCallback(() => {
+  const getPrintBodyHtml = useCallback((compactTwoUp = false) => {
     if (!payment) return '';
     const esc = (s) => (s ?? '').toString().replace(/</g, '&lt;');
     const collegeName = college?.name || 'Institution';
@@ -662,11 +815,15 @@ export default function PaymentDetailsPage() {
           }
         </div>
         <footer class="pr-footer">
-          <div class="pr-footer-thanks">Thank you for your payment</div>
+          ${
+            compactTwoUp
+              ? `<div class="pr-footer-row pr-footer-row--compact">Thank you · Valid without signature · Printed ${formatDateForDisplay(new Date())}</div>`
+              : `<div class="pr-footer-thanks">Thank you for your payment</div>
           <div class="pr-footer-sub">This document was generated electronically and is valid without a signature.</div>
           <div class="pr-footer-row">
             <span>Printed ${formatDateForDisplay(new Date())}</span>
-          </div>
+          </div>`
+          }
         </footer>
       </div>
     `;
@@ -687,18 +844,23 @@ export default function PaymentDetailsPage() {
     if (!payment) return;
     const w = window.open('', '_blank');
     if (!w) { alert('Please allow popups to continue'); return; }
-    const bodyHtml = getPrintBodyHtml();
     const safeCopies = Math.max(1, Number(copies) || 1);
+    const bodyHtml = getPrintBodyHtml(safeCopies === 2);
     const copiesHtml = Array.from({ length: safeCopies })
       .map(() => `<div class="pr-copy">${bodyHtml}</div>`)
       .join('');
+    const bodyAttrs = safeCopies === 2 ? ' class="pr-print-two-on-one"' : '';
+    const twoOnOnePageStyle =
+      safeCopies === 2
+        ? '<style>@media print { @page { margin: 4.5mm 5mm; size: A4 portrait; } }</style>'
+        : '';
     w.document.write(
       `<!DOCTYPE html><html><head><meta charset="utf-8">` +
         `<link rel="preconnect" href="https://fonts.googleapis.com">` +
         `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
         `<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">` +
         `<title>${title} - ${(payment.paymentNumber || '').replace(/</g, '&lt;')}</title>` +
-        `<style>${RECEIPT_PRINT_STYLES}</style></head><body><div class="print-container">${copiesHtml}</div></body></html>`
+        `<style>${RECEIPT_PRINT_STYLES}</style>${twoOnOnePageStyle}</head><body${bodyAttrs}><div class="print-container">${copiesHtml}</div></body></html>`
     );
     w.document.close();
     setTimeout(() => w.print(), 300);
@@ -1218,7 +1380,7 @@ export default function PaymentDetailsPage() {
         <SheetContent side="right" className="w-full sm:max-w-md">
           <SheetHeader>
             <SheetTitle>Select Print Copies</SheetTitle>
-            <SheetDescription>Choose whether you need 1 page or 2 pages before printing.</SheetDescription>
+            <SheetDescription>Print one receipt per page, or two duplicate receipts on a single page.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-3">
             <button
@@ -1246,8 +1408,8 @@ export default function PaymentDetailsPage() {
                   <Copy className="h-5 w-5 text-slate-700" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">2 Pages</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Print two copies in one print job.</p>
+                  <p className="text-sm font-semibold text-slate-900">2 copies on 1 page</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Two identical receipts on one sheet, separated by a dashed line (e.g. office copy and customer copy).</p>
                 </div>
               </div>
             </button>

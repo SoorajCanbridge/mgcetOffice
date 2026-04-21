@@ -346,9 +346,18 @@ export default function PayrollPage() {
       const data = response?.data || response || [];
       const list = Array.isArray(data) ? data : [];
       
-      // Update pagination if available
       if (response?.pagination) {
-        setPagination(response.pagination);
+        setPagination((prev) => {
+          const p = response.pagination;
+          return {
+            ...prev,
+            ...p,
+            page: p.page ?? prev.page,
+            limit: p.limit ?? p.pageSize ?? prev.limit,
+            total: typeof p.total === 'number' ? p.total : prev.total,
+            pages: typeof p.pages === 'number' ? p.pages : prev.pages,
+          };
+        });
       }
 
       setPayrolls(list);
@@ -363,6 +372,14 @@ export default function PayrollPage() {
     filters.status,
     filters.month,
     filters.year,
+    filters.department,
+    filters.costCenter,
+    filters.isReversed,
+    filters.isOnHold,
+    pagination.page,
+    pagination.limit,
+    sortBy,
+    sortOrder,
   ]);
 
   useEffect(() => {
@@ -3090,6 +3107,15 @@ export default function PayrollPage() {
           defaultPageSize={20}
           pageSizeOptions={[10, 20, 50, 100]}
           emptyMessage="No payrolls found. Generate a payroll or adjust filters."
+          pagination={{
+            page: pagination.page,
+            limit: pagination.limit,
+            total: pagination.total,
+            pages: pagination.pages,
+          }}
+          onPaginationChange={({ page, pageSize }) =>
+            setPagination((prev) => ({ ...prev, page, limit: pageSize }))
+          }
           onRowClick={(row) => router.push(`/app/payroll/${row._id}`)}
         />
       </div>

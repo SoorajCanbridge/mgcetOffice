@@ -233,7 +233,7 @@ const navGroups = [
       { title: "Dashboard", url: "/app/finance/tracking", icon: LayoutDashboard, moduleKey: "finance" },
       { title: "Accounts", url: "/app/accounts", icon: Wallet, moduleKey: "finance" },
       { title: "Ledgers", url: "/app/ledgers", icon: Receipt, moduleKey: "finance" },
-      { title: "Balance Sheet", url: "/app/ledgers/balance-sheet", icon: Scale, moduleKey: "finance" },
+      // { title: "Balance Sheet", url: "/app/ledgers/balance-sheet", icon: Scale, moduleKey: "finance" },
       { title: "Income", url: "/app/finance/tracking/income", icon: TrendingUp, moduleKey: "finance" },
       { title: "Expenses", url: "/app/finance/tracking/expenses", icon: TrendingDown, moduleKey: "finance" },
       { title: "Categories", url: "/app/finance/categories", icon: Tag, moduleKey: "finance" },

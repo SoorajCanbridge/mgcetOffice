@@ -12,7 +12,6 @@ import {
   Search,
   RefreshCcw,
   Eye,
-  Edit2,
   MoreVertical,
   XCircle,
   Save,
@@ -114,7 +113,6 @@ export default function FinanceTrackingExpensesPage() {
   const [recurringSchedules, setRecurringSchedules] = useState([]);
   const [recurringLoading, setRecurringLoading] = useState(false);
   const [recurringError, setRecurringError] = useState('');
-  const [scheduleToEdit, setScheduleToEdit] = useState(null);
   const [scheduleToPay, setScheduleToPay] = useState(null);
   const [recurringSearch, setRecurringSearch] = useState('');
   const [recurringStatusFilter, setRecurringStatusFilter] = useState('all');
@@ -133,7 +131,6 @@ export default function FinanceTrackingExpensesPage() {
   const [recurringHistoryLoading, setRecurringHistoryLoading] = useState(false);
   const [recurringHistoryError, setRecurringHistoryError] = useState('');
   const [form, setForm] = useState(EMPTY_EXPENSE);
-  const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [cancellingId, setCancellingId] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -276,7 +273,6 @@ export default function FinanceTrackingExpensesPage() {
 
   const resetForm = () => {
     setForm(EMPTY_EXPENSE);
-    setEditingId(null);
     setShowForm(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -340,13 +336,8 @@ export default function FinanceTrackingExpensesPage() {
         isCancelled: !!form.isCancelled,
         ...(hasRecipient ? { recipient: recipientPayload } : {}),
       };
-      if (editingId) {
-        await api.put(`${FINANCE_BASE}/expenses/${editingId}`, payload, {}, true);
-        showSuccess('Expense updated.');
-      } else {
-        await api.post(`${FINANCE_BASE}/expenses`, payload, {}, true);
-        showSuccess('Expense recorded.');
-      }
+      await api.post(`${FINANCE_BASE}/expenses`, payload, {}, true);
+      showSuccess('Expense recorded.');
       resetForm();
       fetchExpenses();
     } catch (err) {
@@ -354,26 +345,6 @@ export default function FinanceTrackingExpensesPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleEdit = (row) => {
-    setEditingId(row._id);
-    const rec = row.recipient && typeof row.recipient === 'object' ? row.recipient : (row.vendor ? { name: row.vendor, phone: '', email: '', address: '' } : {});
-    const hasRec = !!(rec.name || rec.phone || rec.email || rec.address);
-    setForm({
-      title: row.title || '',
-      amount: row.amount ?? '',
-      date: formatDateForInput(row.date),
-      category: row.category?._id || row.category || '',
-      account: row.account?._id || row.account || '',
-      referenceNumber: row.referenceNumber || '',
-      notes: row.notes || '',
-      files: Array.isArray(row.files) ? [...row.files] : [],
-      isCancelled: row.isCancelled ?? false,
-      haveRecipient: hasRec,
-      recipient: { name: rec.name || '', phone: rec.phone || '', email: rec.email || '', address: rec.address || '' },
-    });
-    setShowForm(true);
   };
 
   const handleCancel = async (row) => {
@@ -415,11 +386,6 @@ export default function FinanceTrackingExpensesPage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const handleEditRecurringSchedule = (row) => {
-    setScheduleToEdit(row);
-    setShowRecurringModal(true);
-  };
-
   const handlePayRecurringSchedule = (row) => {
     setScheduleToPay(row);
   };
@@ -431,7 +397,6 @@ export default function FinanceTrackingExpensesPage() {
       setRecurringError('');
       await api.delete(`${FINANCE_BASE}/recurring-expenses/${row._id}`, {}, true);
       showSuccess('Recurring expense deleted.');
-      if (scheduleToEdit?._id === row._id) setScheduleToEdit(null);
       fetchRecurringSchedules();
     } catch (err) {
       setRecurringError(err.message || 'Failed to delete');
@@ -500,12 +465,6 @@ export default function FinanceTrackingExpensesPage() {
             <Eye className="h-4 w-4 mr-2" />
             View
           </DropdownMenuItem>
-          <PermissionGate moduleKey="finance" action="edit">
-            <DropdownMenuItem onClick={() => handleEdit(row)}>
-              <Edit2 className="h-4 w-4 mr-2" />
-              Edit
-            </DropdownMenuItem>
-          </PermissionGate>
           <PermissionGate moduleKey="finance" action="delete">
             <DropdownMenuItem
               onClick={() => handleCancel(row)}
@@ -548,7 +507,6 @@ export default function FinanceTrackingExpensesPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setScheduleToEdit(null);
                 setShowRecurringModal(true);
               }}
               className="gap-2"
@@ -758,16 +716,6 @@ export default function FinanceTrackingExpensesPage() {
                               variant="outline"
                               size="sm"
                               className="h-8 gap-1"
-                              onClick={() => handleEditRecurringSchedule(row)}
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 gap-1"
                               onClick={() => handlePayRecurringSchedule(row)}
                             >
                               <CreditCard className="h-3.5 w-3.5" />
@@ -910,15 +858,10 @@ export default function FinanceTrackingExpensesPage() {
 
       <RecurringExpenseModal
         open={showRecurringModal}
-        onOpenChange={(v) => {
-          setShowRecurringModal(v);
-          if (!v) setScheduleToEdit(null);
-        }}
+        onOpenChange={setShowRecurringModal}
         expenseCategories={expenseCategories}
         accounts={accounts}
-        editingSchedule={scheduleToEdit}
         onSaved={() => {
-          setScheduleToEdit(null);
           fetchRecurringSchedules();
         }}
       />
@@ -945,12 +888,12 @@ export default function FinanceTrackingExpensesPage() {
       <Dialog open={showForm} onOpenChange={(open) => !open && resetForm()}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Expense' : 'New Expense'}</DialogTitle>
+            <DialogTitle>New Expense</DialogTitle>
             <DialogDescription>
-              {editingId ? 'Update expense details and recipient.' : 'Record new expense. Optionally add recipient details first.'}
+              Record new expense. Optionally add recipient details first.
             </DialogDescription>
           </DialogHeader>
-          <PermissionGate moduleKey="finance" action={editingId ? 'edit' : 'create'}>
+          <PermissionGate moduleKey="finance" action="create">
           <form onSubmit={handleSave} className="space-y-5 mt-2">
             {/* Recipient — top */}
             <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
@@ -1041,7 +984,7 @@ export default function FinanceTrackingExpensesPage() {
               </Button>
               <Button type="submit" disabled={saving} className="gap-2">
                 <Save className="h-4 w-4" />
-                {saving ? 'Saving...' : editingId ? 'Update Expense' : 'Create Expense'}
+                {saving ? 'Saving...' : 'Create Expense'}
               </Button>
             </div>
           </form>

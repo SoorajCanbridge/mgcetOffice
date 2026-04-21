@@ -134,7 +134,6 @@ export default function FinancePage() {
   const [incomeSortBy, setIncomeSortBy] = useState('date');
   const [incomeSortOrder, setIncomeSortOrder] = useState('desc');
   const [incomeForm, setIncomeForm] = useState(EMPTY_INCOME);
-  const [editingIncome, setEditingIncome] = useState(null);
   const [savingIncome, setSavingIncome] = useState(false);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [deletingIncomeId, setDeletingIncomeId] = useState('');
@@ -159,7 +158,6 @@ export default function FinancePage() {
   const [expenseSortBy, setExpenseSortBy] = useState('date');
   const [expenseSortOrder, setExpenseSortOrder] = useState('desc');
   const [expenseForm, setExpenseForm] = useState(EMPTY_EXPENSE);
-  const [editingExpense, setEditingExpense] = useState(null);
   const [savingExpense, setSavingExpense] = useState(false);
   const [deletingExpenseId, setDeletingExpenseId] = useState('');
 
@@ -177,7 +175,6 @@ export default function FinancePage() {
 
   const resetIncomeForm = useCallback(() => {
     setIncomeForm({ ...EMPTY_INCOME, date: formatDateForInput(new Date()) });
-    setEditingIncome(null);
   }, []);
 
   const openIncomeForm = useCallback(() => {
@@ -192,7 +189,6 @@ export default function FinancePage() {
 
   const resetExpenseForm = useCallback(() => {
     setExpenseForm({ ...EMPTY_EXPENSE, date: formatDateForInput(new Date()) });
-    setEditingExpense(null);
   }, []);
 
   const showSuccess = useCallback((msg) => {
@@ -482,18 +478,8 @@ export default function FinancePage() {
         isCancelled: !!incomeForm.isCancelled,
         ...(hasRecipient ? { recipient: recipientPayload } : {}),
       };
-      if (editingIncome?._id) {
-        await api.put(
-          `${FINANCE_BASE}/incomes/${editingIncome._id}`,
-          payload,
-          {},
-          true,
-        );
-        showSuccess('Income updated successfully.');
-      } else {
-        await api.post(`${FINANCE_BASE}/incomes`, payload, {}, true);
-        showSuccess('Income created successfully.');
-      }
+      await api.post(`${FINANCE_BASE}/incomes`, payload, {}, true);
+      showSuccess('Income created successfully.');
       resetIncomeForm();
       setShowIncomeModal(false);
       await fetchIncomes();
@@ -503,29 +489,6 @@ export default function FinancePage() {
     } finally {
       setSavingIncome(false);
     }
-  };
-
-  const handleEditIncome = (income) => {
-    setEditingIncome(income);
-    const rec = income.recipient && typeof income.recipient === 'object' ? income.recipient : {};
-    const hasRec = !!(rec.name || rec.phone || rec.email || rec.address);
-    setIncomeForm({
-      title: income.title || '',
-      amount:
-        income.amount !== undefined && income.amount !== null
-          ? String(income.amount)
-          : '',
-      date: formatDateForInput(income.date),
-      category: income.category?._id || income.category || '',
-      account: income.account?._id || income.account || '',
-      student: income.student?._id || income.student || '',
-      referenceNumber: income.referenceNumber || '',
-      notes: income.notes || '',
-      isCancelled: income.isCancelled ?? false,
-      haveRecipient: hasRec,
-      recipient: { name: rec.name || '', phone: rec.phone || '', email: rec.email || '', address: rec.address || '' },
-    });
-    setShowIncomeModal(true);
   };
 
   const handleDeleteIncome = async (income) => {
@@ -582,18 +545,8 @@ export default function FinancePage() {
         isCancelled: !!expenseForm.isCancelled,
         ...(hasRecipient ? { recipient: recipientPayload } : {}),
       };
-      if (editingExpense?._id) {
-        await api.put(
-          `${FINANCE_BASE}/expenses/${editingExpense._id}`,
-          payload,
-          {},
-          true,
-        );
-        showSuccess('Expense updated successfully.');
-      } else {
-        await api.post(`${FINANCE_BASE}/expenses`, payload, {}, true);
-        showSuccess('Expense created successfully.');
-      }
+      await api.post(`${FINANCE_BASE}/expenses`, payload, {}, true);
+      showSuccess('Expense created successfully.');
       resetExpenseForm();
       await fetchExpenses();
       await fetchSummary();
@@ -602,27 +555,6 @@ export default function FinancePage() {
     } finally {
       setSavingExpense(false);
     }
-  };
-
-  const handleEditExpense = (expense) => {
-    setEditingExpense(expense);
-    const rec = expense.recipient && typeof expense.recipient === 'object' ? expense.recipient : (expense.vendor ? { name: expense.vendor, phone: '', email: '', address: '' } : {});
-    const hasRec = !!(rec.name || rec.phone || rec.email || rec.address);
-    setExpenseForm({
-      title: expense.title || '',
-      amount:
-        expense.amount !== undefined && expense.amount !== null
-          ? String(expense.amount)
-          : '',
-      date: formatDateForInput(expense.date),
-      category: expense.category?._id || expense.category || '',
-      account: expense.account?._id || expense.account || '',
-      referenceNumber: expense.referenceNumber || '',
-      notes: expense.notes || '',
-      isCancelled: expense.isCancelled ?? false,
-      haveRecipient: hasRec,
-      recipient: { name: rec.name || '', phone: rec.phone || '', email: rec.email || '', address: rec.address || '' },
-    });
   };
 
   const handleDeleteExpense = async (expense) => {
@@ -902,18 +834,6 @@ export default function FinancePage() {
         View
       </Button>
       <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEditIncome(row);
-        }}
-      >
-        <Edit2 className="h-4 w-4" />
-        Edit
-      </Button>
-      <Button
         variant="destructive"
         size="sm"
         className="gap-2"
@@ -1033,18 +953,6 @@ export default function FinancePage() {
       >
         <Eye className="h-4 w-4" />
         View
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEditExpense(row);
-        }}
-      >
-        <Edit2 className="h-4 w-4" />
-        Edit
       </Button>
       <Button
         variant="destructive"
@@ -1542,9 +1450,9 @@ export default function FinancePage() {
           <Dialog open={showIncomeModal} onOpenChange={(open) => !open && closeIncomeModal()}>
             <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingIncome ? 'Edit Income' : 'New Income'}</DialogTitle>
+                <DialogTitle>New Income</DialogTitle>
                 <DialogDescription>
-                  {editingIncome ? 'Update income details and recipient.' : 'Record new income. Optionally add recipient details first.'}
+                  Record new income. Optionally add recipient details first.
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSaveIncome} className="space-y-5 mt-2">
@@ -1627,7 +1535,7 @@ export default function FinancePage() {
                   </Button>
                   <Button type="submit" disabled={savingIncome} className="gap-2">
                     <Save className="h-4 w-4" />
-                    {savingIncome ? 'Saving...' : editingIncome ? 'Update Income' : 'Create Income'}
+                    {savingIncome ? 'Saving...' : 'Create Income'}
                   </Button>
                 </div>
               </form>
@@ -1753,18 +1661,8 @@ export default function FinancePage() {
           >
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-lg font-semibold">
-                {editingExpense ? 'Edit Expense' : 'New Expense'}
+                New Expense
               </h2>
-              {editingExpense && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={resetExpenseForm}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="md:col-span-2">
@@ -1906,11 +1804,7 @@ export default function FinancePage() {
                 className="gap-2"
               >
                 <Save className="h-4 w-4" />
-                {savingExpense
-                  ? 'Saving...'
-                  : editingExpense
-                  ? 'Update Expense'
-                  : 'Create Expense'}
+                {savingExpense ? 'Saving...' : 'Create Expense'}
               </Button>
             </div>
           </form>

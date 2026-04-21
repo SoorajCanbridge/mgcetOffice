@@ -9,7 +9,6 @@ import {
   Download,
   Printer,
   RefreshCcw,
-  Edit2,
   DollarSign,
   CheckCircle2,
   XCircle,
@@ -929,14 +928,6 @@ export default function ExpenseDetailsPage() {
           >
             <Printer className="h-3.5 w-3.5" /> Print
           </button>
-          {!expense.isCancelled && (
-            <button
-              onClick={() => router.push(`/app/finance?editExpense=${expenseId}`)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-red-600 text-white hover:bg-red-700 shadow-sm shadow-red-600/25 transition-all duration-150"
-            >
-              <Edit2 className="h-3.5 w-3.5" /> Edit Expense
-            </button>
-          )}
         </div>
       </div>
 
@@ -1133,9 +1124,6 @@ export default function ExpenseDetailsPage() {
               {[
                 { icon: Printer, label: 'Print Voucher', onClick: handlePrint, red: false },
                 { icon: Download, label: exporting ? 'Exporting…' : 'Export as CSV', onClick: handleExportCSV, disabled: exporting, red: false },
-                ...(!expense.isCancelled
-                  ? [{ icon: Edit2, label: 'Edit Expense', onClick: () => router.push(`/app/finance?editExpense=${expenseId}`), red: true }]
-                  : []),
               ].map(({ icon: Icon, label, onClick, disabled, red }, i) => (
                 <button
                   key={i}
