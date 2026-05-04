@@ -55,6 +55,14 @@ import StudentForm from '@/components/student-form';
 
 const INVOICE_BASE = '/finance/invoices';
 
+const financeCategoryId = (ref) => {
+  if (ref == null || ref === '') return '';
+  if (typeof ref === 'object' && ref !== null) {
+    return String(ref._id || ref.id || '');
+  }
+  return String(ref);
+};
+
 const formatDateForDisplay = (date) => {
   if (!date) return '-';
   try {
@@ -699,6 +707,7 @@ export default function StudentDetailsPage() {
         terms: full.terms,
         student: full.student?._id || full.student || undefined,
         savedContent: full.savedContent?._id || full.savedContent || undefined,
+        category: financeCategoryId(full.category) || undefined,
       };
       await api.put(`${INVOICE_BASE}/${feeWaiverInvoice._id}`, payload, {}, true);
       showFlash('Fee waiver applied.');
@@ -737,6 +746,7 @@ export default function StudentDetailsPage() {
           terms: full.terms,
           student: full.student?._id || full.student || undefined,
           savedContent: full.savedContent?._id || full.savedContent || undefined,
+          category: financeCategoryId(full.category) || undefined,
         };
         await api.put(`${INVOICE_BASE}/${invoice._id}`, payload, {}, true);
         showFlash('Invoice cancelled.');

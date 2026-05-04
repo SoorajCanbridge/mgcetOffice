@@ -39,6 +39,7 @@ const EMPTY_PAYMENT = {
   bankName: '',
   description: '',
   notes: '',
+  category: '',
 };
 
 const PAYMENT_STATUSES = [
@@ -99,6 +100,7 @@ export default function PaymentsPage() {
   const [invoices, setInvoices] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [students, setStudents] = useState([]);
+  const [financeCategories, setFinanceCategories] = useState([]);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -164,6 +166,24 @@ export default function PaymentsPage() {
     }
   }, [user?.college]);
 
+  const fetchFinanceCategories = useCallback(async () => {
+    if (!user?.college) return;
+    try {
+      const response = await api.get('/finance/categories', {}, true);
+      const data = response?.data || response || [];
+      const list = Array.isArray(data) ? data : [];
+      setFinanceCategories(
+        list.filter(
+          (category) =>
+            category?.isActive !== false &&
+            ['income', 'both'].includes(String(category?.type || '').toLowerCase()),
+        ),
+      );
+    } catch (err) {
+      console.error('Failed to load finance categories:', err);
+    }
+  }, [user?.college]);
+
   const fetchPayments = useCallback(async () => {
     if (!user?.college) return;
     try {
@@ -179,6 +199,10 @@ export default function PaymentsPage() {
       if (filters.accountId) params.append('accountId', filters.accountId);
       if (filters.startDate) params.append('startDate', filters.startDate);
       if (filters.endDate) params.append('endDate', filters.endDate);
+      params.append('page', String(pagination.page));
+      params.append('limit', String(pagination.limit));
+      params.append('sortBy', sortBy);
+      params.append('sortOrder', sortOrder);
 
       const response = await api.get(
         `${PAYMENTS_BASE}?${params.toString()}`,
@@ -186,9 +210,31 @@ export default function PaymentsPage() {
         true,
       );
       const data = response?.data || response || [];
-      const list = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.items)
+        ? data.items
+        : [];
 
       setPayments(list);
+      const paginationData = response?.pagination || data?.pagination;
+      if (paginationData) {
+        setPagination((prev) => ({
+          ...prev,
+          page: paginationData.page ?? prev.page,
+          limit: paginationData.limit ?? paginationData.pageSize ?? prev.limit,
+          total: typeof paginationData.total === 'number' ? paginationData.total : prev.total,
+          pages: typeof paginationData.pages === 'number' ? paginationData.pages : prev.pages,
+        }));
+      } else {
+        setPagination((prev) => ({
+          ...prev,
+          total: list.length,
+          pages: Math.max(1, Math.ceil(list.length / prev.limit)),
+        }));
+      }
     } catch (err) {
       setError(err.message || 'Failed to load payments');
     } finally {
@@ -203,6 +249,10 @@ export default function PaymentsPage() {
     filters.accountId,
     filters.startDate,
     filters.endDate,
+    pagination.page,
+    pagination.limit,
+    sortBy,
+    sortOrder,
   ]);
 
   useEffect(() => {
@@ -210,7 +260,8 @@ export default function PaymentsPage() {
     fetchInvoices();
     fetchAccounts();
     fetchStudents();
-  }, [user?.college, fetchInvoices, fetchAccounts, fetchStudents]);
+    fetchFinanceCategories();
+  }, [user?.college, fetchInvoices, fetchAccounts, fetchStudents, fetchFinanceCategories]);
 
   useEffect(() => {
     if (!user?.college) return;
@@ -260,6 +311,19 @@ export default function PaymentsPage() {
     setTimeout(() => setSuccess(''), 3000);
   }, []);
 
+  const updateFilter = useCallback((key, value) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, []);
+
+  const handleApplyFilters = useCallback(() => {
+    if (pagination.page === 1) {
+      fetchPayments();
+      return;
+    }
+    setPagination((prev) => ({ ...prev, page: 1 }));
+  }, [pagination.page, fetchPayments]);
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setPaymentForm((prev) => ({
@@ -290,6 +354,8 @@ export default function PaymentsPage() {
         description: paymentForm.description.trim() || undefined,
         notes: paymentForm.notes.trim() || undefined,
       };
+      const category = (paymentForm.category || '').trim();
+      if (category) payload.category = category;
 
       await api.post(`${PAYMENTS_BASE}`, payload, {}, true);
       showSuccess('Payment created successfully.');
@@ -459,6 +525,18 @@ export default function PaymentsPage() {
       type: 'text',
       searchable: true,
     },
+    {
+      id: 'category',
+      accessorKey: 'category',
+      header: 'Finance category',
+      type: 'text',
+      searchable: true,
+      accessorFn: (row) => {
+        const category = row.category;
+        if (!category || typeof category !== 'object') return '';
+        return category.name || '';
+      },
+    },
   ], []);
 
   // Define actions for Payments DataTable
@@ -477,7 +555,7 @@ export default function PaymentsPage() {
         View
       </Button>
     </div>
-  ), [router]);
+  ), []);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -606,9 +684,7 @@ export default function PaymentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <select
             value={filters.status}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, status: e.target.value }))
-            }
+            onChange={(e) => updateFilter('status', e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">All Statuses</option>
@@ -620,12 +696,7 @@ export default function PaymentsPage() {
           </select>
           <select
             value={filters.paymentMethod}
-            onChange={(e) =>
-              setFilters((prev) => ({
-                ...prev,
-                paymentMethod: e.target.value,
-              }))
-            }
+            onChange={(e) => updateFilter('paymentMethod', e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">All Methods</option>
@@ -637,9 +708,7 @@ export default function PaymentsPage() {
           </select>
           <select
             value={filters.invoiceId}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, invoiceId: e.target.value }))
-            }
+            onChange={(e) => updateFilter('invoiceId', e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">All Invoices</option>
@@ -653,19 +722,15 @@ export default function PaymentsPage() {
             type="date"
             placeholder="Start Date"
             value={filters.startDate}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, startDate: e.target.value }))
-            }
+            onChange={(e) => updateFilter('startDate', e.target.value)}
           />
           <Input
             type="date"
             placeholder="End Date"
             value={filters.endDate}
-            onChange={(e) =>
-              setFilters((prev) => ({ ...prev, endDate: e.target.value }))
-            }
+            onChange={(e) => updateFilter('endDate', e.target.value)}
           />
-          <Button onClick={fetchPayments} className="md:col-span-1">
+          <Button onClick={handleApplyFilters} className="md:col-span-1">
             Apply Filters
           </Button>
         </div>
@@ -891,6 +956,24 @@ export default function PaymentsPage() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">
+                Finance category
+              </label>
+              <select
+                name="category"
+                value={paymentForm.category}
+                onChange={handleFormChange}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">None</option>
+                {financeCategories.map((category) => (
+                  <option key={category._id} value={category._id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">
                 Reference Number
               </label>
               <Input
@@ -1006,6 +1089,15 @@ export default function PaymentsPage() {
           storageKey="payments-table"
           defaultPageSize={20}
           pageSizeOptions={[10, 20, 50, 100]}
+          pagination={{
+            page: pagination.page,
+            limit: pagination.limit,
+            total: pagination.total,
+            pages: pagination.pages,
+          }}
+          onPaginationChange={({ page, pageSize }) =>
+            setPagination((prev) => ({ ...prev, page, limit: pageSize }))
+          }
           emptyMessage="No payments found"
           onRowClick={(row) => router.push(`/app/payments/${row._id}`)}
         />

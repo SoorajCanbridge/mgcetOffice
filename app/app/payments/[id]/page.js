@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   CreditCard, ArrowLeft, Download, Printer, Mail, Phone, MapPin,
-  RefreshCcw, Edit2, DollarSign, CheckCircle, XCircle,
+  RefreshCcw, DollarSign, CheckCircle, XCircle,
   Clock, FileText, Package, Copy,
 } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/sheet';
 
 const PAYMENTS_BASE = '/finance/payments';
+const DEFAULT_LEVEL_LABELS = { A: 'Level A', B: 'Level B', C: 'Level C' };
+const normalizeLevelLabels = (labels) => ({ ...DEFAULT_LEVEL_LABELS, ...(labels || {}) });
 
 const formatDateForDisplay = (date) => {
   if (!date) return '—';
@@ -56,8 +58,8 @@ const RECEIPT_PRINT_FONT_STACK =
 const RECEIPT_PRINT_STYLES = `
   :root {
     --pr-ink: #0f172a;
-    --pr-muted: #64748b;
-    --pr-faint: #94a3b8;
+    --pr-muted: #0f172a;
+    --pr-faint: #0f172a;
     --pr-line: #e2e8f0;
     --pr-surface: #f8fafc;
     --pr-accent: #059669;
@@ -72,7 +74,7 @@ const RECEIPT_PRINT_STYLES = `
     padding: 0;
     color: var(--pr-ink);
     background: #f1f5f9;
-    font-size: 10.5px;
+    font-size: 12.5px;
     line-height: 1.35;
     font-feature-settings: "tnum" 1;
     -webkit-font-smoothing: antialiased;
@@ -86,7 +88,7 @@ const RECEIPT_PRINT_STYLES = `
   .pr-copy { margin-bottom: 10px; }
   .pr-copy + .pr-copy { page-break-before: always; break-before: page; }
   /* Two identical receipts on one A4 — compact layout; overflow flows to next page */
-  body.pr-print-two-on-one { font-size: 8px; line-height: 1.22; }
+  body.pr-print-two-on-one { font-size: 10px; line-height: 1.22; }
   body.pr-print-two-on-one .pr-copy {
     margin-bottom: 0;
     /* Prefer each receipt as one unit; UA may break inside if taller than one page */
@@ -105,36 +107,39 @@ const RECEIPT_PRINT_STYLES = `
     width: 28px;
     height: 28px;
     border-radius: 5px;
-    font-size: 12px;
+    font-size: 13px;
   }
   body.pr-print-two-on-one .pr-head {
     gap: 8px;
     padding: 5px 8px 4px;
   }
   body.pr-print-two-on-one .pr-head-left { gap: 6px; }
-  body.pr-print-two-on-one .pr-inst { font-size: 11px; letter-spacing: -0.015em; }
-  body.pr-print-two-on-one .pr-inst-line { font-size: 7px; margin-top: 1px; line-height: 1.25; }
-  body.pr-print-two-on-one .pr-doc-label { font-size: 6.5px; margin-bottom: 1px; }
-  body.pr-print-two-on-one .pr-doc-num { font-size: 14px; }
-  body.pr-print-two-on-one .pr-doc-date { font-size: 7px; margin-top: 2px; }
-  body.pr-print-two-on-one .pr-badge { margin-top: 3px; padding: 2px 6px; font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-inst { font-size: 12px; letter-spacing: -0.015em; }
+  body.pr-print-two-on-one .pr-inst-line { font-size: 8px; margin-top: 1px; line-height: 1.25; }
+  body.pr-print-two-on-one .pr-doc-label { font-size: 7.5px; margin-bottom: 1px; }
+  body.pr-print-two-on-one .pr-doc-num { font-size: 15px; }
+  body.pr-print-two-on-one .pr-doc-date { font-size: 8px; margin-top: 2px; }
+  body.pr-print-two-on-one .pr-badge { margin-top: 3px; padding: 2px 6px; font-size: 7.5px; }
   body.pr-print-two-on-one .pr-strip {
     gap: 4px 5px;
     padding: 3px 8px;
-    font-size: 7.5px;
+    font-size: 8.5px;
   }
   body.pr-print-two-on-one .pr-chip { padding: 2px 5px; gap: 3px; border-radius: 4px; }
-  body.pr-print-two-on-one .pr-chip-k { font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-chip-k { font-size: 7.5px; }
   body.pr-print-two-on-one .pr-title-center { display: none; }
   body.pr-print-two-on-one .pr-body { padding: 5px 8px 5px; }
   body.pr-print-two-on-one .pr-grid { gap: 5px; margin-bottom: 5px; }
   body.pr-print-two-on-one .pr-panel { padding: 5px 7px; border-radius: 5px; }
-  body.pr-print-two-on-one .pr-panel-h { font-size: 6.5px; margin-bottom: 3px; }
-  body.pr-print-two-on-one .pr-payee-name { font-size: 9px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-panel-h { font-size: 7.5px; margin-bottom: 3px; }
+  body.pr-print-two-on-one .pr-levels-wrap { margin-top: 6px; padding: 5px 5px 4px; gap: 4px 6px; }
+  body.pr-print-two-on-one .pr-level-k { font-size: 7px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-level-v { font-size: 8.5px; }
+  body.pr-print-two-on-one .pr-payee-name { font-size: 10px; margin-bottom: 2px; }
   body.pr-print-two-on-one .pr-dl > div {
     grid-template-columns: 58px 1fr;
     gap: 2px 5px;
-    font-size: 7.5px;
+    font-size: 8.5px;
     padding: 1px 0;
   }
   body.pr-print-two-on-one .pr-amount-panel { padding: 5px 6px; border-radius: 5px; }
@@ -143,13 +148,13 @@ const RECEIPT_PRINT_STYLES = `
     margin-bottom: 4px;
     padding-bottom: 4px;
   }
-  body.pr-print-two-on-one .pr-above-k { font-size: 6px; margin-bottom: 0; }
-  body.pr-print-two-on-one .pr-above-v { font-size: 8px; }
-  body.pr-print-two-on-one .pr-amount-label { font-size: 6px; margin-bottom: 2px; }
-  body.pr-print-two-on-one .pr-amount-val { font-size: 15px; }
+  body.pr-print-two-on-one .pr-above-k { font-size: 7px; margin-bottom: 0; }
+  body.pr-print-two-on-one .pr-above-v { font-size: 9px; }
+  body.pr-print-two-on-one .pr-amount-label { font-size: 7px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-amount-val { font-size: 16px; }
   body.pr-print-two-on-one .pr-subblock { margin-top: 4px; padding-top: 4px; }
-  body.pr-print-two-on-one .pr-subblock-h { font-size: 6px; margin-bottom: 3px; }
-  body.pr-print-two-on-one .pr-mini-row { font-size: 7px; padding: 2px 0; gap: 5px; }
+  body.pr-print-two-on-one .pr-subblock-h { font-size: 7px; margin-bottom: 3px; }
+  body.pr-print-two-on-one .pr-mini-row { font-size: 8px; padding: 2px 0; gap: 5px; }
   body.pr-print-two-on-one .pr-summary-alloc-grid,
   body.pr-print-two-on-one .pr-invoice-summary-row {
     gap: 5px;
@@ -157,56 +162,56 @@ const RECEIPT_PRINT_STYLES = `
   }
   body.pr-print-two-on-one .pr-block { margin-bottom: 5px; }
   body.pr-print-two-on-one .pr-block-h {
-    font-size: 6.5px;
+    font-size: 7.5px;
     margin-bottom: 3px;
     gap: 4px;
   }
   body.pr-print-two-on-one .pr-block-h::before { width: 2px; height: 8px; }
-  body.pr-print-two-on-one .pr-data-table { font-size: 7.5px; border-radius: 4px; }
+  body.pr-print-two-on-one .pr-data-table { font-size: 8.5px; border-radius: 4px; }
   body.pr-print-two-on-one .pr-data-table thead th {
     padding: 2px 4px;
-    font-size: 6px;
+    font-size: 7px;
   }
   body.pr-print-two-on-one .pr-data-table tbody td { padding: 2px 4px; }
-  body.pr-print-two-on-one .pr-data-table tfoot td { padding: 3px 4px; font-size: 7px; }
-  body.pr-print-two-on-one .pr-data-table--wide { font-size: 7px; }
-  body.pr-print-two-on-one .pr-compact-alloc { font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-data-table tfoot td { padding: 3px 4px; font-size: 8px; }
+  body.pr-print-two-on-one .pr-data-table--wide { font-size: 8px; }
+  body.pr-print-two-on-one .pr-compact-alloc { font-size: 7.5px; }
   body.pr-print-two-on-one .pr-compact-alloc thead th,
   body.pr-print-two-on-one .pr-compact-alloc tbody td,
   body.pr-print-two-on-one .pr-compact-alloc tfoot td { padding: 2px 3px !important; }
-  body.pr-print-two-on-one .pr-warn { margin-top: 3px; padding: 3px 5px; font-size: 7px; }
+  body.pr-print-two-on-one .pr-warn { margin-top: 3px; padding: 3px 5px; font-size: 8px; }
   body.pr-print-two-on-one .pr-invoice-bar {
     gap: 5px 10px;
     padding: 3px 7px;
     margin-bottom: 4px;
     border-radius: 4px;
   }
-  body.pr-print-two-on-one .pr-invoice-bar strong { font-size: 8px; }
-  body.pr-print-two-on-one .pr-invoice-bar span { font-size: 7px; }
+  body.pr-print-two-on-one .pr-invoice-bar strong { font-size: 9px; }
+  body.pr-print-two-on-one .pr-invoice-bar span { font-size: 8px; }
   body.pr-print-two-on-one .pr-ledger {
     max-width: 200px;
     margin-bottom: 4px;
     border-radius: 5px;
   }
-  body.pr-print-two-on-one .pr-ledger table { font-size: 7.5px; }
+  body.pr-print-two-on-one .pr-ledger table { font-size: 8.5px; }
   body.pr-print-two-on-one .pr-ledger tr td { padding: 3px 6px; }
-  body.pr-print-two-on-one .pr-ledger tr td:first-child { font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-ledger tr td:first-child { font-size: 7.5px; }
   body.pr-print-two-on-one .pr-ledger tr.pr-ledger-total td {
-    font-size: 7.5px;
+    font-size: 8.5px;
     padding-top: 3px;
     padding-bottom: 3px;
   }
   body.pr-print-two-on-one .pr-notes {
     padding: 4px 6px;
-    font-size: 7.5px;
+    font-size: 8.5px;
     line-height: 1.25;
     border-radius: 4px;
   }
-  body.pr-print-two-on-one .pr-notes-h { font-size: 6px; margin-bottom: 2px; }
+  body.pr-print-two-on-one .pr-notes-h { font-size: 7px; margin-bottom: 2px; }
   body.pr-print-two-on-one .pr-footer { padding: 4px 8px 5px; }
-  body.pr-print-two-on-one .pr-footer-thanks { font-size: 8px; margin-bottom: 1px; }
-  body.pr-print-two-on-one .pr-footer-sub { font-size: 6.5px; line-height: 1.2; }
-  body.pr-print-two-on-one .pr-footer-row { margin-top: 3px; font-size: 6.5px; }
+  body.pr-print-two-on-one .pr-footer-thanks { font-size: 9px; margin-bottom: 1px; }
+  body.pr-print-two-on-one .pr-footer-sub { font-size: 7.5px; line-height: 1.2; }
+  body.pr-print-two-on-one .pr-footer-row { margin-top: 3px; font-size: 7.5px; }
   body.pr-print-two-on-one .pr-footer-row--compact {
     margin-top: 0;
     justify-content: center;
@@ -245,20 +250,20 @@ const RECEIPT_PRINT_STYLES = `
     background: linear-gradient(145deg, var(--pr-accent-soft, #ecfdf5) 0%, #d1fae5 100%);
     border: 1px solid #a7f3d0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 16px; font-weight: 800; color: var(--pr-accent);
+    font-size: 17px; font-weight: 800; color: var(--pr-accent);
   }
-  .pr-inst { font-size: 14px; font-weight: 700; letter-spacing: -0.02em; color: var(--pr-ink); line-height: 1.2; }
-  .pr-inst-line { font-size: 9px; color: var(--pr-muted); margin-top: 3px; line-height: 1.35; max-width: none; }
+  .pr-inst { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; color: var(--pr-ink); line-height: 1.2; }
+  .pr-inst-line { font-size: 10px; color: var(--pr-muted); margin-top: 3px; line-height: 1.35; max-width: none; }
   .pr-head-right { text-align: right; flex-shrink: 0; }
   .pr-doc-label {
-    font-size: 8px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pr-faint);
+    font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pr-faint);
     margin-bottom: 3px;
   }
-  .pr-doc-num { font-size: 20px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--pr-ink); line-height: 1; }
-  .pr-doc-date { font-size: 9px; color: var(--pr-muted); margin-top: 4px; }
+  .pr-doc-num { font-size: 21px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--pr-ink); line-height: 1; }
+  .pr-doc-date { font-size: 10px; color: var(--pr-muted); margin-top: 4px; }
   .pr-badge {
     display: inline-block; margin-top: 5px; padding: 3px 8px; border-radius: 999px;
-    font-size: 8px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   }
   .pr-badge.completed { background: #ecfdf5; color: var(--pr-accent-ink); border: 1px solid #a7f3d0; }
   .pr-badge.pending { background: #fffbeb; color: #a16207; border: 1px solid #fde68a; }
@@ -269,15 +274,15 @@ const RECEIPT_PRINT_STYLES = `
     padding: 6px 12px;
     background: var(--pr-surface);
     border-bottom: 1px solid var(--pr-line);
-    font-size: 9px;
+    font-size: 10px;
   }
   .pr-chip { display: inline-flex; align-items: baseline; gap: 5px; padding: 3px 8px; background: #fff; border: 1px solid var(--pr-line); border-radius: 6px; }
-  .pr-chip-k { font-weight: 600; color: var(--pr-muted); font-size: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pr-chip-k { font-weight: 700; color: var(--pr-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
   .pr-chip-v { font-weight: 600; color: var(--pr-ink); }
   .pr-body { padding: 10px 12px 10px; }
   .pr-title-center {
     text-align: center;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -297,15 +302,45 @@ const RECEIPT_PRINT_STYLES = `
     background: #fff;
   }
   .pr-panel-h {
-    font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pr-faint);
+    font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pr-faint);
     margin-bottom: 6px;
   }
-  .pr-payee-name { font-size: 11px; font-weight: 700; color: var(--pr-ink); margin-bottom: 4px; }
+  .pr-payee-name { font-size: 12px; font-weight: 700; color: var(--pr-ink); margin-bottom: 4px; }
   .pr-dl { margin: 0; }
-  .pr-dl > div { display: grid; grid-template-columns: 72px 1fr; gap: 4px 8px; font-size: 9.5px; padding: 2px 0; border-bottom: 1px dashed #f1f5f9; }
+  .pr-dl > div { display: grid; grid-template-columns: 72px 1fr; gap: 4px 8px; font-size: 10.5px; padding: 2px 0; border-bottom: 1px dashed #f1f5f9; }
   .pr-dl > div:last-child { border-bottom: none; }
-  .pr-dl dt { color: var(--pr-muted); font-weight: 500; }
+  .pr-dl dt { color: var(--pr-muted); font-weight: 700; }
   .pr-dl dd { color: var(--pr-ink); font-weight: 500; word-break: break-word; }
+  .pr-levels-wrap {
+    margin-top: 10px;
+    padding: 8px 8px 6px;
+    border-top: 1px solid var(--pr-line);
+    border-radius: 6px;
+    background: var(--pr-surface);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 10px;
+    align-items: start;
+  }
+  .pr-level-cell { min-width: 0; text-align: left; }
+  .pr-level-k {
+    display: block;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pr-faint);
+    margin-bottom: 3px;
+    line-height: 1.2;
+  }
+  .pr-level-v {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--pr-muted);
+    line-height: 1.35;
+    word-break: break-word;
+  }
   .pr-amount-panel {
     border-radius: 8px;
     padding: 10px 8px;
@@ -318,29 +353,29 @@ const RECEIPT_PRINT_STYLES = `
     margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #d1fae5; text-align: left;
   }
   .pr-above-amount > div { min-width: 0; }
-  .pr-above-k { font-size: 7.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pr-muted); display: block; margin-bottom: 2px; }
-  .pr-above-v { font-size: 10px; font-weight: 700; color: var(--pr-ink); }
+  .pr-above-k { font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pr-muted); display: block; margin-bottom: 2px; }
+  .pr-above-v { font-size: 11px; font-weight: 700; color: var(--pr-ink); }
   .pr-summary-alloc-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; margin-bottom: 10px;
   }
   .pr-invoice-summary-row {
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; margin-bottom: 10px;
   }
-  .pr-compact-alloc { font-size: 8px; }
+  .pr-compact-alloc { font-size: 9px; }
   .pr-compact-alloc thead th, .pr-compact-alloc tbody td, .pr-compact-alloc tfoot td { padding: 3px 5px !important; }
-  .pr-amount-label { font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pr-accent-ink); opacity: 0.85; margin-bottom: 4px; }
-  .pr-amount-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; color: var(--pr-accent); line-height: 1.05; }
+  .pr-amount-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pr-accent-ink); opacity: 0.85; margin-bottom: 4px; }
+  .pr-amount-val { font-size: 23px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; color: var(--pr-accent); line-height: 1.05; }
   .pr-subblock { margin-top: 8px; padding-top: 8px; border-top: 1px solid #d1fae5; text-align: left; }
-  .pr-subblock-h { font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pr-muted); margin-bottom: 5px; }
-  .pr-mini-row { display: flex; justify-content: space-between; gap: 8px; font-size: 9px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+  .pr-subblock-h { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pr-muted); margin-bottom: 5px; }
+  .pr-mini-row { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
   .pr-mini-row:last-child { border-bottom: none; }
-  .pr-mini-k { color: var(--pr-muted); font-weight: 500; }
+  .pr-mini-k { color: var(--pr-muted); font-weight: 700; }
   .pr-mini-v { font-weight: 600; color: var(--pr-ink); text-align: right; word-break: break-all; }
   .pr-block { margin-bottom: 10px; }
   .pr-block:last-child { margin-bottom: 0; }
   .pr-block-h {
     display: flex; align-items: center; gap: 6px;
-    font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pr-muted);
+    font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pr-muted);
     margin-bottom: 5px;
   }
   .pr-block-h::before {
@@ -348,12 +383,12 @@ const RECEIPT_PRINT_STYLES = `
   }
   .pr-data-table {
     width: 100%; border-collapse: separate; border-spacing: 0;
-    font-size: 9.5px; border: 1px solid var(--pr-line); border-radius: 6px; overflow: hidden;
+    font-size: 10.5px; border: 1px solid var(--pr-line); border-radius: 6px; overflow: hidden;
   }
   .pr-data-table thead th {
     text-align: left; padding: 4px 6px;
     background: var(--pr-surface);
-    font-size: 7.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pr-muted);
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pr-muted);
     border-bottom: 1px solid var(--pr-line);
   }
   .pr-data-table thead th.num { text-align: right; }
@@ -367,12 +402,12 @@ const RECEIPT_PRINT_STYLES = `
     padding: 5px 6px; font-weight: 700; font-variant-numeric: tabular-nums;
     background: #f8fafc; border-top: 1px solid var(--pr-line); color: var(--pr-ink);
   }
-  .pr-data-table tfoot td[colspan] { text-align: left; font-weight: 600; color: var(--pr-muted); font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .pr-data-table tfoot td[colspan] { text-align: left; font-weight: 700; color: var(--pr-muted); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; }
   .pr-data-table tfoot td.num { text-align: right; color: var(--pr-accent); }
-  .pr-data-table--wide { font-size: 8.5px; }
+  .pr-data-table--wide { font-size: 9.5px; }
   .pr-data-table--wide thead th, .pr-data-table--wide tbody td, .pr-data-table--wide tfoot td { padding-left: 4px; padding-right: 4px; }
   .pr-warn {
-    margin-top: 5px; padding: 5px 8px; border-radius: 5px; font-size: 9px;
+    margin-top: 5px; padding: 5px 8px; border-radius: 5px; font-size: 10px;
     background: var(--pr-warn-bg); color: var(--pr-warn-ink); border: 1px solid #fde68a;
   }
   .pr-invoice-bar {
@@ -381,8 +416,8 @@ const RECEIPT_PRINT_STYLES = `
     background: var(--pr-surface); border: 1px solid var(--pr-line);
     margin-bottom: 8px;
   }
-  .pr-invoice-bar strong { font-size: 10.5px; font-weight: 700; }
-  .pr-invoice-bar span { font-size: 9px; color: var(--pr-muted); }
+  .pr-invoice-bar strong { font-size: 11.5px; font-weight: 700; }
+  .pr-invoice-bar span { font-size: 10px; color: var(--pr-muted); }
   .pr-ledger {
     width: 100%;
     max-width: 240px;
@@ -390,42 +425,42 @@ const RECEIPT_PRINT_STYLES = `
     border: 1px solid var(--pr-line); border-radius: 8px; overflow: hidden;
     margin-bottom: 8px;
   }
-  .pr-ledger table { width: 100%; border-collapse: collapse; font-size: 10px; font-variant-numeric: tabular-nums; }
+  .pr-ledger table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
   .pr-ledger tr td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; }
-  .pr-ledger tr td:first-child { color: var(--pr-muted); font-weight: 500; font-size: 9px; }
+  .pr-ledger tr td:first-child { color: var(--pr-muted); font-weight: 700; font-size: 10px; }
   .pr-ledger tr td:last-child { text-align: right; font-weight: 700; color: var(--pr-ink); }
   .pr-ledger tr.pr-ledger-total td {
     background: var(--pr-surface);
-    border-bottom: none; font-size: 10.5px; padding-top: 6px; padding-bottom: 6px;
+    border-bottom: none; font-size: 11.5px; padding-top: 6px; padding-bottom: 6px;
   }
   .pr-ledger tr.pr-ledger-total td:last-child { color: var(--pr-danger); }
   .pr-ledger tr.pr-ledger-total.pr-ledger-zero td:last-child { color: var(--pr-accent); }
   .pr-notes {
     padding: 8px 10px; border-radius: 6px; background: #fafafa; border: 1px dashed var(--pr-line);
-    font-size: 9.5px; color: #475569; line-height: 1.4; margin-bottom: 0; white-space: pre-wrap;
+    font-size: 10.5px; color: #475569; line-height: 1.4; margin-bottom: 0; white-space: pre-wrap;
   }
-  .pr-notes-h { font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pr-muted); margin-bottom: 5px; }
+  .pr-notes-h { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pr-muted); margin-bottom: 5px; }
   .pr-footer {
     padding: 8px 12px 10px;
     border-top: 1px solid var(--pr-line);
     background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
     text-align: center;
   }
-  .pr-footer-thanks { font-size: 10px; font-weight: 700; color: var(--pr-ink); margin-bottom: 3px; }
-  .pr-footer-sub { font-size: 8.5px; color: var(--pr-muted); line-height: 1.35; }
-  .pr-footer-row { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 8px; color: var(--pr-faint); }
+  .pr-footer-thanks { font-size: 11px; font-weight: 700; color: var(--pr-ink); margin-bottom: 3px; }
+  .pr-footer-sub { font-size: 9.5px; color: var(--pr-muted); line-height: 1.35; }
+  .pr-footer-row { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 9px; color: var(--pr-faint); }
   @media print {
     body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .print-container { padding: 0; max-width: 100%; width: 100%; }
     .pr-sheet { box-shadow: none; border-radius: 0; border: none; }
     .pr-grid { gap: 8px; }
     body.pr-print-two-on-one {
-      font-size: 7.25px;
+      font-size: 9.25px;
       line-height: 1.58;
     }
-    body.pr-print-two-on-one .pr-doc-num { font-size: 13px; }
-    body.pr-print-two-on-one .pr-amount-val { font-size: 13px; }
-    body.pr-print-two-on-one .pr-inst { font-size: 10px; }
+    body.pr-print-two-on-one .pr-doc-num { font-size: 14px; }
+    body.pr-print-two-on-one .pr-amount-val { font-size: 14px; }
+    body.pr-print-two-on-one .pr-inst { font-size: 11px; }
     body.pr-print-two-on-one .pr-head { padding: 4px 6px 3px; }
     body.pr-print-two-on-one .pr-body { padding: 4px 6px 4px; }
     body.pr-print-two-on-one .pr-grid { gap: 4px; margin-bottom: 4px; }
@@ -463,6 +498,18 @@ export default function PaymentDetailsPage() {
   const [exporting, setExporting] = useState(false);
   const [printDrawerOpen, setPrintDrawerOpen] = useState(false);
   const [pendingPrintTitle, setPendingPrintTitle] = useState('Payment Receipt');
+  const [levelLabels, setLevelLabels] = useState(DEFAULT_LEVEL_LABELS);
+
+  const courseDetails = useMemo(() => {
+    const invoiceCourse = invoice?.courseDetails || {};
+    const studentCourse = student?.course && typeof student.course === 'object' ? student.course : {};
+    return {
+      courseName: String(invoiceCourse.courseName || studentCourse.name || '').trim(),
+      levelA: String(invoiceCourse.levelA || studentCourse.levelA || '').trim(),
+      levelB: String(invoiceCourse.levelB || studentCourse.levelB || '').trim(),
+      levelC: String(invoiceCourse.levelC || studentCourse.levelC || '').trim(),
+    };
+  }, [invoice?.courseDetails, student?.course]);
 
   const collegeLogoUrl = useMemo(() => {
     if (!college?.logo) return '';
@@ -484,14 +531,17 @@ export default function PaymentDetailsPage() {
     try {
       setLoading(true); setError('');
       const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
-      const [payResponse, collegeResponse] = await Promise.all([
+      const [payResponse, collegeResponse, levelConfigResponse] = await Promise.all([
         api.get(`${PAYMENTS_BASE}/${paymentId}`, {}, true),
         api.get(`/colleges/${collegeId}`, {}, true).catch(() => ({ data: null })),
+        api.get(`/academic/config/${collegeId}`).catch(() => ({ data: null })),
       ]);
       const data = payResponse?.data || payResponse;
       setPayment(data);
       const collegeData = collegeResponse?.data || collegeResponse;
       if (collegeData) setCollege(collegeData);
+      const levelConfigData = levelConfigResponse?.data || levelConfigResponse || {};
+      setLevelLabels(normalizeLevelLabels(levelConfigData.levelNames));
 
       if (data.student) {
         const studentId = typeof data.student === 'object' ? data.student._id : data.student;
@@ -548,7 +598,17 @@ export default function PaymentDetailsPage() {
         rows.push([], ['Amount Allocation'], ['Account', 'Type', 'Method', 'Amount']);
         amountSplits.forEach(s => rows.push([s.account?.name || '', s.account?.accountType || '', s.paymentMethod || '', s.amount ?? '']));
       }
-      if (student) { rows.push([], ['Student Name', student.name || ''], ['Student ID', student.studentId || '']); }
+      if (student) { rows.push([], ['Student Name', student.name || ''], ['Student ID', student.studentId || student.rollNumber || '']); }
+      if (courseDetails.courseName || courseDetails.levelA || courseDetails.levelB || courseDetails.levelC) {
+        rows.push(
+          [],
+          ['Course details'],
+          ['Course', courseDetails.courseName || ''],
+          [levelLabels.A || DEFAULT_LEVEL_LABELS.A, courseDetails.levelA || ''],
+          [levelLabels.B || DEFAULT_LEVEL_LABELS.B, courseDetails.levelB || ''],
+          [levelLabels.C || DEFAULT_LEVEL_LABELS.C, courseDetails.levelC || ''],
+        );
+      }
       if (invoice) {
         rows.push([], ['Invoice Number', invoice.invoiceNumber || ''], ['Invoice Total', invoice.totalAmount || 0]);
         if (Array.isArray(invoice.items) && invoice.items.length > 0) {
@@ -595,7 +655,7 @@ export default function PaymentDetailsPage() {
       link.click();
       document.body.removeChild(link);
     } catch { alert('Failed to export CSV'); } finally { setExporting(false); }
-  }, [payment, student, invoice, amountSplits, hasAmountSplits, paymentId]);
+  }, [payment, student, invoice, amountSplits, hasAmountSplits, paymentId, courseDetails, levelLabels]);
 
   const getPrintBodyHtml = useCallback((compactTwoUp = false) => {
     if (!payment) return '';
@@ -612,12 +672,23 @@ export default function PaymentDetailsPage() {
     const invBalance = invoice?.balanceAmount ?? (invTotal != null ? invTotal - invPaid : null);
     const st = payment.status || 'pending';
 
-    const payeeDl = student
+    const studentRef = student?.studentId || student?.rollNumber || '';
+    const nonStudentRecipient =
+      !student && payment?.recipient && typeof payment.recipient === 'object'
+        ? payment.recipient
+        : !student && invoice?.billTo && typeof invoice.billTo === 'object'
+          ? invoice.billTo
+          : null;
+    const recipientName = student?.name || nonStudentRecipient?.name || '';
+    const recipientAddress = nonStudentRecipient?.address || '';
+    const contactLine = student
+      ? [student?.email, student?.phone || student?.alternatePhone].filter(Boolean).join(' · ')
+      : [nonStudentRecipient?.email, nonStudentRecipient?.phone].filter(Boolean).join(' · ');
+    const payeeDl = student || nonStudentRecipient
       ? `<dl class="pr-dl">
-          ${student.studentId ? `<div><dt>Student ID</dt><dd>${esc(student.studentId)}</dd></div>` : ''}
-          ${student.rollNumber && !student.studentId ? `<div><dt>Roll No.</dt><dd>${esc(student.rollNumber)}</dd></div>` : ''}
-          ${student.email ? `<div><dt>Email</dt><dd>${esc(student.email)}</dd></div>` : ''}
-          ${student.phone ? `<div><dt>Phone</dt><dd>${esc(student.phone)}</dd></div>` : ''}
+          ${contactLine ? `<div><dt>Contact</dt><dd>${esc(contactLine)}</dd></div>` : ''}
+          ${recipientAddress ? `<div><dt>Address</dt><dd>${esc(recipientAddress)}</dd></div>` : ''}
+          ${courseDetails.courseName ? `<div><dt>Batch</dt><dd>${esc(courseDetails.courseName)}</dd></div>` : ''}
         </dl>`
       : `<p style="color:#94a3b8;font-size:9px;margin:0">—</p>`;
 
@@ -655,14 +726,13 @@ export default function PaymentDetailsPage() {
           <span class="pr-above-k">Payment date</span>
           <span class="pr-above-v">${formatDateForDisplay(payment.paymentDate)}</span>
         </div>
-        ${
-          payment.createdBy?.name
-            ? `<div>
+        ${payment.createdBy?.name
+        ? `<div>
           <span class="pr-above-k">Recorded by</span>
           <span class="pr-above-v">${esc(payment.createdBy.name)}</span>
         </div>`
-            : ''
-        }
+        : ''
+      }
       </div>`;
 
     const ledgerLastClass =
@@ -672,12 +742,11 @@ export default function PaymentDetailsPage() {
 
     const ledgerRowsHtml = `
       ${invTotal != null ? `<tr><td>Invoice total</td><td>${formatCurrency(invTotal)}</td></tr>` : ''}
-      <tr><td>This receipt</td><td>${formatCurrency(payment.amount || 0)}</td></tr>
+      <tr><td>Amount Received</td><td>${formatCurrency(payment.amount || 0)}</td></tr>
       ${invPaid != null && invTotal != null ? `<tr><td>Total paid on invoice</td><td>${formatCurrency(invPaid)}</td></tr>` : ''}
-      ${
-        invBalance != null
-          ? `<tr class="${ledgerLastClass}"><td>Balance due</td><td>${formatCurrency(invBalance)}</td></tr>`
-          : `<tr class="pr-ledger-total pr-ledger-zero"><td>Amount received</td><td>${formatCurrency(payment.amount || 0)}</td></tr>`
+      ${invBalance != null
+        ? `<tr class="${ledgerLastClass}"><td>Balance due</td><td>${formatCurrency(invBalance)}</td></tr>`
+        : `<tr class="pr-ledger-total pr-ledger-zero"><td>Amount received</td><td>${formatCurrency(payment.amount || 0)}</td></tr>`
       }`;
 
     const receiptSummaryBlock = `<div class="pr-block">
@@ -691,17 +760,16 @@ export default function PaymentDetailsPage() {
       <table class="pr-data-table pr-compact-alloc">
         <thead><tr><th>Account</th><th>Type</th><th class="num">Amt</th></tr></thead>
         <tbody>${amountSplits
-          .map(
-            (s) =>
-              `<tr><td>${esc(s.account?.name || '—')}</td><td>${esc(formatAccountTypeLabel(s.account?.accountType))}</td><td class="num">${formatCurrency(s.amount)}</td></tr>`
-          )
-          .join('')}</tbody>
+        .map(
+          (s) =>
+            `<tr><td>${esc(s.account?.name || '—')}</td><td>${esc(formatAccountTypeLabel(s.account?.accountType))}</td><td class="num">${formatCurrency(s.amount)}</td></tr>`
+        )
+        .join('')}</tbody>
         <tfoot><tr><td colspan="2">Total</td><td class="num">${formatCurrency(splitsTotal)}</td></tr></tfoot>
       </table>
-      ${
-        splitTotalMismatch
-          ? `<div class="pr-warn">Split total does not match receipt amount — verify with your records.</div>`
-          : ''
+      ${splitTotalMismatch
+        ? `<div class="pr-warn">Split total does not match receipt amount — verify with your records.</div>`
+        : ''
       }
     </div>`
       : '';
@@ -746,14 +814,14 @@ export default function PaymentDetailsPage() {
               <th class="num">Balance</th>
             </tr></thead>
             <tbody>${invLineItems
-              .map((item) => {
-                const itemAmount = item.amount || 0;
-                const itemPaid = item.paidAmount || 0;
-                const itemBalance = itemAmount - itemPaid;
-                const taxCells = invProductTax
-                  ? `<td class="num">${item.taxRate != null ? esc(String(item.taxRate)) + '%' : '—'}</td><td class="num">${formatCurrency(item.taxAmount || 0)}</td>`
-                  : '';
-                return `<tr>
+          .map((item) => {
+            const itemAmount = item.amount || 0;
+            const itemPaid = item.paidAmount || 0;
+            const itemBalance = itemAmount - itemPaid;
+            const taxCells = invProductTax
+              ? `<td class="num">${item.taxRate != null ? esc(String(item.taxRate)) + '%' : '—'}</td><td class="num">${formatCurrency(item.taxAmount || 0)}</td>`
+              : '';
+            return `<tr>
                 <td>${esc(item.description || '—')}</td>
                 ${showInvQtyUnitPrice ? `<td class="num">${esc(String(item.quantity ?? 0))}</td>` : ''}
                 ${showInvQtyUnitPrice ? `<td class="num">${formatCurrency(item.unitPrice || 0)}</td>` : ''}
@@ -762,8 +830,8 @@ export default function PaymentDetailsPage() {
                 <td class="num">${formatCurrency(itemPaid)}</td>
                 <td class="num">${formatCurrency(itemBalance)}</td>
               </tr>`;
-              })
-              .join('')}
+          })
+          .join('')}
             </tbody>
           </table>
         </div>`
@@ -792,8 +860,10 @@ export default function PaymentDetailsPage() {
           <div class="pr-grid">
             <section class="pr-panel">
               <div class="pr-panel-h">Received from</div>
-              ${student ? `<div class="pr-payee-name">${esc(student.name)}</div>` : ''}
+              ${recipientName ? `<div class="pr-payee-name">${esc(recipientName)}${studentRef ? ` (${esc(studentRef)})` : ''}</div>` : ''}
               ${payeeDl}
+              ${courseDetails.levelA || courseDetails.levelB || courseDetails.levelC ? `<div class="pr-levels-wrap">${courseDetails.levelA ? `<div class="pr-level-cell"><span class="pr-level-k">${esc(levelLabels.A || DEFAULT_LEVEL_LABELS.A)}</span><span class="pr-level-v">${esc(courseDetails.levelA)}</span></div>` : '<div class="pr-level-cell"></div>'}${courseDetails.levelB ? `<div class="pr-level-cell"><span class="pr-level-k">${esc(levelLabels.B || DEFAULT_LEVEL_LABELS.B)}</span><span class="pr-level-v">${esc(courseDetails.levelB)}</span></div>` : '<div class="pr-level-cell"></div>'}${courseDetails.levelC ? `<div class="pr-level-cell"><span class="pr-level-k">${esc(levelLabels.C || DEFAULT_LEVEL_LABELS.C)}</span><span class="pr-level-v">${esc(courseDetails.levelC)}</span></div>` : '<div class="pr-level-cell"></div>'}</div>` : ''}
+
             </section>
             <section class="pr-amount-panel">
               ${aboveAmountHtml}
@@ -805,25 +875,23 @@ export default function PaymentDetailsPage() {
           ${invoiceLineItemsHtml}
           ${summarySectionHtml}
          
-          ${
-            payment.description || payment.notes
-              ? `<div class="pr-block">
+          ${payment.description || payment.notes
+        ? `<div class="pr-block">
                   <div class="pr-notes-h">Notes</div>
                   <div class="pr-notes">${esc(payment.description || payment.notes || '').replace(/\n/g, '<br/>')}</div>
                 </div>`
-              : ''
-          }
+        : ''
+      }
         </div>
         <footer class="pr-footer">
-          ${
-            compactTwoUp
-              ? `<div class="pr-footer-row pr-footer-row--compact">Thank you · Valid without signature · Printed ${formatDateForDisplay(new Date())}</div>`
-              : `<div class="pr-footer-thanks">Thank you for your payment</div>
+          ${compactTwoUp
+        ? `<div class="pr-footer-row pr-footer-row--compact">Thank you · Valid without signature · Printed ${formatDateForDisplay(new Date())}</div>`
+        : `<div class="pr-footer-thanks">Thank you for your payment</div>
           <div class="pr-footer-sub">This document was generated electronically and is valid without a signature.</div>
           <div class="pr-footer-row">
             <span>Printed ${formatDateForDisplay(new Date())}</span>
           </div>`
-          }
+      }
         </footer>
       </div>
     `;
@@ -834,6 +902,8 @@ export default function PaymentDetailsPage() {
     student,
     invoice,
     account,
+    courseDetails,
+    levelLabels,
     hasAmountSplits,
     amountSplits,
     splitsTotal,
@@ -856,11 +926,11 @@ export default function PaymentDetailsPage() {
         : '';
     w.document.write(
       `<!DOCTYPE html><html><head><meta charset="utf-8">` +
-        `<link rel="preconnect" href="https://fonts.googleapis.com">` +
-        `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
-        `<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">` +
-        `<title>${title} - ${(payment.paymentNumber || '').replace(/</g, '&lt;')}</title>` +
-        `<style>${RECEIPT_PRINT_STYLES}</style>${twoOnOnePageStyle}</head><body${bodyAttrs}><div class="print-container">${copiesHtml}</div></body></html>`
+      `<link rel="preconnect" href="https://fonts.googleapis.com">` +
+      `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
+      `<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">` +
+      `<title>${title} - ${(payment.paymentNumber || '').replace(/</g, '&lt;')}</title>` +
+      `<style>${RECEIPT_PRINT_STYLES}</style>${twoOnOnePageStyle}</head><body${bodyAttrs}><div class="print-container">${copiesHtml}</div></body></html>`
     );
     w.document.close();
     setTimeout(() => w.print(), 300);
@@ -884,9 +954,9 @@ export default function PaymentDetailsPage() {
 
   const statusConfig = {
     completed: { color: 'text-emerald-700 bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle, label: 'Completed' },
-    pending:   { color: 'text-amber-700 bg-amber-50 border-amber-200',   dot: 'bg-amber-500',   icon: Clock,        label: 'Pending'   },
-    failed:    { color: 'text-red-700 bg-red-50 border-red-200',         dot: 'bg-red-500',     icon: XCircle,      label: 'Failed'    },
-    cancelled: { color: 'text-slate-600 bg-slate-50 border-slate-200',   dot: 'bg-slate-400',   icon: XCircle,      label: 'Cancelled' },
+    pending: { color: 'text-amber-700 bg-amber-50 border-amber-200', dot: 'bg-amber-500', icon: Clock, label: 'Pending' },
+    failed: { color: 'text-red-700 bg-red-50 border-red-200', dot: 'bg-red-500', icon: XCircle, label: 'Failed' },
+    cancelled: { color: 'text-slate-600 bg-slate-50 border-slate-200', dot: 'bg-slate-400', icon: XCircle, label: 'Cancelled' },
   };
   const sc = statusConfig[payment?.status] || statusConfig.pending;
   const StatusIcon = sc.icon;
@@ -923,6 +993,24 @@ export default function PaymentDetailsPage() {
   const invProductTax = invoice?.taxCalculationMethod === 'product';
   const invLineItems = Array.isArray(invoice?.items) ? invoice.items : [];
   const showInvQtyUnitPrice = invLineItems.some((item) => Number(item?.quantity ?? 0) !== 1);
+  const nonStudentRecipient =
+    !student && payment?.recipient && typeof payment.recipient === 'object'
+      ? payment.recipient
+      : !student && invoice?.billTo && typeof invoice.billTo === 'object'
+        ? invoice.billTo
+        : null;
+  const recipientName = student?.name || nonStudentRecipient?.name || '';
+  const recipientRef = student?.studentId
+    ? `(${student.studentId})`
+    : student?.rollNumber
+      ? `(Roll No: ${student.rollNumber})`
+      : '';
+  const recipientContactLine = student
+    ? [student?.email, student?.phone || student?.alternatePhone].filter(Boolean).join(' | ')
+    : [nonStudentRecipient?.email, nonStudentRecipient?.phone].filter(Boolean).join(' | ');
+  const recipientAddress = student?.address
+    ? [student.address.street, student.address.city, student.address.state, student.address.pincode].filter(Boolean).join(', ')
+    : nonStudentRecipient?.address || '';
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
@@ -960,11 +1048,6 @@ export default function PaymentDetailsPage() {
           <button onClick={handleExportPDF} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">
             <Download className="h-3.5 w-3.5" />PDF
           </button>
-          {payment.status !== 'completed' && (
-            <button onClick={() => router.push(`/app/payments?edit=${paymentId}`)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">
-              <Edit2 className="h-3.5 w-3.5" />Edit
-            </button>
-          )}
           <button onClick={handlePrint} className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
             <Printer className="h-3.5 w-3.5" />Print Receipt
           </button>
@@ -1025,29 +1108,37 @@ export default function PaymentDetailsPage() {
             {/* Recipient */}
             <div className="lg:col-span-2 space-y-1">
               <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase mb-3">Received From</p>
-              {student ? (
+              {recipientName || recipientContactLine || recipientAddress ? (
                 <div className="space-y-2">
-                  <p className="text-base font-bold text-slate-900">{student.name}</p>
-                  {(student.studentId || student.rollNumber) && (
-                    <p className="text-xs text-slate-500 font-medium">
-                      {student.studentId ? `ID: ${student.studentId}` : `Roll No: ${student.rollNumber}`}
-                    </p>
-                  )}
+                  {recipientName && <p className="text-base font-bold text-slate-900">{recipientName} {recipientRef}</p>}
                   <div className="space-y-1.5 pt-1">
-                    {student.email && (
+                    {recipientContactLine && (
                       <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Mail className="h-3.5 w-3.5 text-slate-300" />{student.email}
+                        {recipientContactLine}
                       </div>
                     )}
-                    {student.phone && (
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Phone className="h-3.5 w-3.5 text-slate-300" />{student.phone}
-                      </div>
-                    )}
-                    {student.address && (
+                    {recipientAddress && (
                       <div className="flex items-start gap-2 text-xs text-slate-500">
-                        <MapPin className="h-3.5 w-3.5 text-slate-300 mt-0.5 flex-shrink-0" />
-                        <span>{[student.address.street, student.address.city, student.address.state, student.address.pincode].filter(Boolean).join(', ')}</span>
+                        Address:
+                        <span>{recipientAddress}</span>
+                      </div>
+                    )}
+                    {courseDetails.courseName && (
+                      <div className="text-xs text-slate-500">
+                        <span className="text-slate-400">Batch:</span>{' '}
+                        <span className="font-semibold text-slate-700">{courseDetails.courseName}</span>
+                      </div>
+                    )}
+                    {['A', 'B', 'C'].some((k) => courseDetails[`level${k}`]) && (
+                      <div className="text-xs text-slate-500">
+                        {['A', 'B', 'C'].map((k) =>
+                          courseDetails[`level${k}`] ? (
+                            <span key={k} className="mr-3 last:mr-0">
+                              <span className="text-slate-400">{levelLabels[k] || DEFAULT_LEVEL_LABELS[k]}:</span>{' '}
+                              <span className="font-semibold text-slate-700">{courseDetails[`level${k}`]}</span>
+                            </span>
+                          ) : null
+                        )}
                       </div>
                     )}
                   </div>
@@ -1070,12 +1161,6 @@ export default function PaymentDetailsPage() {
                     <p className="text-sm font-semibold text-slate-900">{payment.createdBy.name}</p>
                   </div>
                 )}
-              </div>
-              <div className="rounded-xl border-2 border-emerald-200/80 bg-gradient-to-b from-emerald-50/90 to-white px-5 py-5 text-center shadow-sm">
-                <p className="text-[10px] font-bold tracking-[0.15em] text-emerald-700/80 uppercase mb-2">Amount received</p>
-                <p className="text-3xl sm:text-4xl font-bold text-emerald-600 tabular-nums tracking-tight">
-                  {formatCurrency(payment.amount || 0)}
-                </p>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {[
@@ -1104,12 +1189,6 @@ export default function PaymentDetailsPage() {
           {/* ── Invoice line items (products) ── */}
           {invLineItems.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Package className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">{"Invoice : " + (invoice?.invoiceNumber || 'N/A')}</p>
-                <div className="flex-1 h-px bg-slate-100" />
-                <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">{"Invoice Date: " + formatDateForDisplay(invoice.invoiceDate)}</p>
-              </div>
               <div className="rounded-xl border border-slate-100 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm min-w-[720px]">
@@ -1158,9 +1237,8 @@ export default function PaymentDetailsPage() {
                               {formatCurrency(itemPaid)}
                             </td>
                             <td
-                              className={`py-3 px-4 text-right font-medium tabular-nums ${
-                                itemBalance > 0 ? 'text-red-600' : itemBalance < 0 ? 'text-emerald-600' : 'text-slate-400'
-                              }`}
+                              className={`py-3 px-4 text-right font-medium tabular-nums ${itemBalance > 0 ? 'text-red-600' : itemBalance < 0 ? 'text-emerald-600' : 'text-slate-400'
+                                }`}
                             >
                               {formatCurrency(itemBalance)}
                             </td>
@@ -1176,7 +1254,7 @@ export default function PaymentDetailsPage() {
           {/* ── Receipt summary ± Invoice ref (no splits) or Summary | Allocation (splits) ── */}
           {hasAmountSplits ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-               <div>
+              <div>
                 <div className="flex items-center gap-2 mb-3">
                   <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase">Amount allocation</p>
                   <div className="flex-1 h-px bg-slate-100"></div>
@@ -1231,7 +1309,7 @@ export default function PaymentDetailsPage() {
                     </div>
                   )}
                   <div className="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
-                    <span className="text-xs text-slate-500">This Receipt</span>
+                    <span className="text-xs text-slate-500">Amount Received</span>
                     <span className="text-sm font-semibold text-emerald-600 tabular-nums">{formatCurrency(payment.amount || 0)}</span>
                   </div>
                   {invoice?.paidAmount != null && invTotal != null && (
@@ -1254,7 +1332,7 @@ export default function PaymentDetailsPage() {
                     </div>
                   )}
                 </div>
-              </div>            
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -1297,7 +1375,7 @@ export default function PaymentDetailsPage() {
                     </div>
                   )}
                   <div className="flex justify-between items-center px-4 py-3 border-b border-slate-50">
-                    <span className="text-xs text-slate-500">This Receipt</span>
+                    <span className="text-xs text-slate-500">Amount Received</span>
                     <span className="text-sm font-semibold text-emerald-600 tabular-nums">{formatCurrency(payment.amount || 0)}</span>
                   </div>
                   {invoice?.paidAmount != null && invTotal != null && (

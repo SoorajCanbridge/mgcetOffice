@@ -29,6 +29,7 @@ import {
   User,
   Calendar,
   LayoutTemplate,
+  Layers,
   Receipt,
   FileSpreadsheet,
   GraduationCap,
@@ -90,7 +91,22 @@ const EMPTY_INVOICE = {
   terms: '',
   student: '',
   savedContent: '',
+  category: '',
   studentImage: '',
+  courseDetails: {
+    courseName: '',
+    levelA: '',
+    levelB: '',
+    levelC: '',
+  },
+};
+
+const financeCategoryId = (ref) => {
+  if (ref == null || ref === '') return '';
+  if (typeof ref === 'object' && ref !== null) {
+    return String(ref._id || ref.id || '');
+  }
+  return String(ref);
 };
 
 const INVOICE_STATUSES = [
@@ -197,6 +213,13 @@ const normalizeLevelValues = (levelValues) => {
   };
 };
 
+const normalizeCourseDetails = (details) => ({
+  courseName: String(details?.courseName || '').trim(),
+  levelA: String(details?.levelA || '').trim(),
+  levelB: String(details?.levelB || '').trim(),
+  levelC: String(details?.levelC || '').trim(),
+});
+
 export default function InvoicesPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -242,6 +265,7 @@ export default function InvoicesPage() {
   });
   const [processingPayment, setProcessingPayment] = useState(false);
   const [accounts, setAccounts] = useState([]);
+  const [financeCategories, setFinanceCategories] = useState([]);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [emailInvoice, setEmailInvoice] = useState(null);
   const [emailTo, setEmailTo] = useState('');
@@ -351,6 +375,21 @@ export default function InvoicesPage() {
     }
   }, [user?.college]);
 
+  const fetchFinanceCategories = useCallback(async () => {
+    if (!user?.college) return;
+    try {
+      const params = new URLSearchParams();
+      params.set('isActive', 'true');
+      params.set('type', 'income');
+      const response = await api.get(`/finance/categories?${params.toString()}`, {}, true);
+      const data = response?.data || response || [];
+      setFinanceCategories(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to load finance categories:', err);
+      setFinanceCategories([]);
+    }
+  }, [user?.college]);
+
   const fetchInvoices = useCallback(async () => {
     if (!user?.college) return;
     try {
@@ -391,7 +430,8 @@ export default function InvoicesPage() {
     fetchLevelLabels();
     fetchSavedContents();
     fetchAccounts();
-  }, [user?.college, fetchCourses, fetchLevelLabels, fetchSavedContents, fetchAccounts]);
+    fetchFinanceCategories();
+  }, [user?.college, fetchCourses, fetchLevelLabels, fetchSavedContents, fetchAccounts, fetchFinanceCategories]);
 
   useEffect(() => {
     if (!user?.college) return;
@@ -444,6 +484,15 @@ export default function InvoicesPage() {
         ...prev,
         billTo: {
           ...prev.billTo,
+          [field]: value,
+        },
+      }));
+    } else if (name.startsWith('courseDetails.')) {
+      const field = name.split('.')[1];
+      setInvoiceForm((prev) => ({
+        ...prev,
+        courseDetails: {
+          ...prev.courseDetails,
           [field]: value,
         },
       }));
@@ -565,6 +614,7 @@ export default function InvoicesPage() {
           taxRate: templateTaxRate,
           discount: Number(content.discount) || 0,
           savedContent: contentId,
+          category: financeCategoryId(content.category),
         };
       });
     }
@@ -588,6 +638,9 @@ export default function InvoicesPage() {
     const address = typeof rawAddress === 'object' && rawAddress !== null && !Array.isArray(rawAddress)
       ? formatAddressForDisplay(rawAddress)
       : (rawAddress || '');
+    const studentCourse = typeof s.course === 'object' && s.course
+      ? s.course
+      : courses.find((course) => String(course._id) === String(s.course));
     setInvoiceForm((prev) => ({
       ...prev,
       student: id,
@@ -598,6 +651,12 @@ export default function InvoicesPage() {
         phone: s.phone || s.parentPhone || s.guardianPhone || prev.billTo.phone,
         address,
       },
+      courseDetails: normalizeCourseDetails({
+        courseName: studentCourse?.name || s.courseName || prev.courseDetails?.courseName,
+        levelA: studentCourse?.levelA || s.levelA || prev.courseDetails?.levelA,
+        levelB: studentCourse?.levelB || s.levelB || prev.courseDetails?.levelB,
+        levelC: studentCourse?.levelC || s.levelC || prev.courseDetails?.levelC,
+      }),
     }));
     setStudentSelectModalOpen(false);
     setInvoiceFormStep(2);
@@ -693,7 +752,12 @@ export default function InvoicesPage() {
         terms: invoiceForm.terms?.trim() || undefined,
         student: invoiceForm.student || undefined,
         savedContent: invoiceForm.savedContent || undefined,
+        courseDetails: normalizeCourseDetails(invoiceForm.courseDetails),
       };
+
+      const cat = (invoiceForm.category || '').trim();
+      if (cat) payload.category = cat;
+      else if (isEditing) payload.category = null;
   
       // 🔹 API Call
       if (isEditing && editingInvoice?._id) {
@@ -783,7 +847,9 @@ export default function InvoicesPage() {
       terms: invoice.terms || '',
       student: invoice.student?._id || invoice.student || '',
       savedContent: invoice.savedContent?._id || invoice.savedContent || '',
+      category: financeCategoryId(invoice.category),
       studentImage: (invoice.student && invoice.student.image) || '',
+      courseDetails: normalizeCourseDetails(invoice.courseDetails),
     });
     setShowForm(true);
   };
@@ -843,6 +909,8 @@ export default function InvoicesPage() {
         terms: full.terms,
         student: full.student?._id || full.student || undefined,
         savedContent: full.savedContent?._id || full.savedContent || undefined,
+        category: financeCategoryId(full.category) || undefined,
+        courseDetails: normalizeCourseDetails(full.courseDetails),
       };
       await api.put(`${INVOICE_BASE}/${invoice._id}`, payload, {}, true);
       showSuccess('Invoice cancelled.');
@@ -926,6 +994,8 @@ export default function InvoicesPage() {
         terms: full.terms,
         student: full.student?._id || full.student || undefined,
         savedContent: full.savedContent?._id || full.savedContent || undefined,
+        category: financeCategoryId(full.category) || undefined,
+        courseDetails: normalizeCourseDetails(full.courseDetails),
       };
       await api.put(`${INVOICE_BASE}/${feeWaiverInvoice._id}`, payload, {}, true);
       showSuccess('Fee waiver applied.');
@@ -960,6 +1030,8 @@ export default function InvoicesPage() {
         terms: full.terms,
         student: full.student?._id || full.student || undefined,
         savedContent: full.savedContent?._id || full.savedContent || undefined,
+        category: financeCategoryId(full.category) || undefined,
+        courseDetails: normalizeCourseDetails(full.courseDetails),
       };
       await api.put(`${INVOICE_BASE}/${savedDraftInvoice._id}`, payload, {}, true);
       setSavedDraftInvoice((prev) => (prev ? { ...prev, status: 'sent' } : null));
@@ -1376,6 +1448,20 @@ export default function InvoicesPage() {
         if (!row.student) return row.billTo?.name || '-';
         const student = typeof row.student === 'object' ? row.student : null;
         return student ? `${student.name}${student.studentId ? ` (${student.studentId})` : ''}` : (row.billTo?.name || '-');
+      },
+    },
+    {
+      id: 'category',
+      accessorKey: 'category',
+      header: 'Finance category',
+      type: 'text',
+      searchable: true,
+      sortable: false,
+      accessorFn: (row) => {
+        const c = row.category;
+        if (!c) return '';
+        if (typeof c === 'object' && c !== null && c.name) return String(c.name);
+        return '';
       },
     },
     {
@@ -2020,6 +2106,46 @@ export default function InvoicesPage() {
                     className="h-10"
                   />
                 </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium mb-1.5">Course</label>
+                  <Input
+                    name="courseDetails.courseName"
+                    value={invoiceForm.courseDetails?.courseName || ''}
+                    onChange={handleFormChange}
+                    placeholder="Course name"
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">{levelLabels.A}</label>
+                  <Input
+                    name="courseDetails.levelA"
+                    value={invoiceForm.courseDetails?.levelA || ''}
+                    onChange={handleFormChange}
+                    placeholder={`Enter ${levelLabels.A.toLowerCase()}`}
+                    className="h-10"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5">{levelLabels.B}</label>
+                  <Input
+                    name="courseDetails.levelB"
+                    value={invoiceForm.courseDetails?.levelB || ''}
+                    onChange={handleFormChange}
+                    placeholder={`Enter ${levelLabels.B.toLowerCase()}`}
+                    className="h-10"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium mb-1.5">{levelLabels.C}</label>
+                  <Input
+                    name="courseDetails.levelC"
+                    value={invoiceForm.courseDetails?.levelC || ''}
+                    onChange={handleFormChange}
+                    placeholder={`Enter ${levelLabels.C.toLowerCase()}`}
+                    className="h-10"
+                  />
+                </div>
                 {savedContents.length > 0 && (
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium mb-1.5">
@@ -2046,6 +2172,28 @@ export default function InvoicesPage() {
                     <p className="text-xs text-muted-foreground mt-1">Recipient and notes stay unchanged.</p>
                   </div>
                 )}
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-1.5 text-sm font-medium mb-1.5">
+                    <Layers className="h-4 w-4" />
+                    Finance category
+                  </label>
+                  <select
+                    name="category"
+                    value={invoiceForm.category}
+                    onChange={handleFormChange}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">None</option>
+                    {financeCategories.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name || c._id}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Optional income category for this invoice. Loading a template sets this from the template when present.
+                  </p>
+                </div>
               </div>
             </section>
             </div>

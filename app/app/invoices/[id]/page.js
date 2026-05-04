@@ -17,12 +17,22 @@ import {
   CheckCircle,
   TrendingUp,
   Building2,
+  Layers,
+  MapPin,
 } from 'lucide-react';
 import { api, API_URL } from '@/lib/api';
 import { getLogoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 const INVOICE_BASE = '/finance/invoices';
+
+const financeCategoryId = (ref) => {
+  if (ref == null || ref === '') return '';
+  if (typeof ref === 'object' && ref !== null) {
+    return String(ref._id || ref.id || '');
+  }
+  return String(ref);
+};
 
 const formatDateForDisplay = (date) => {
   if (!date) return '-';
@@ -57,6 +67,20 @@ const formatDateForCSV = (date) => {
   } catch {
     return '';
   }
+};
+
+const DEFAULT_LEVEL_LABELS = { A: 'Level A', B: 'Level B', C: 'Level C' };
+const normalizeLevelLabels = (labels) => ({ ...DEFAULT_LEVEL_LABELS, ...(labels || {}) });
+
+const getCourseDetails = (invoice, student) => {
+  const invoiceCourse = invoice?.courseDetails || {};
+  const studentCourse = student?.course && typeof student.course === 'object' ? student.course : {};
+  return {
+    courseName: String(invoiceCourse.courseName || studentCourse.name || '').trim(),
+    levelA: String(invoiceCourse.levelA || studentCourse.levelA || '').trim(),
+    levelB: String(invoiceCourse.levelB || studentCourse.levelB || '').trim(),
+    levelC: String(invoiceCourse.levelC || studentCourse.levelC || '').trim(),
+  };
 };
 
 const PRINT_STYLES = `
@@ -160,6 +184,7 @@ export default function InvoiceDetailsPage() {
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [levelLabels, setLevelLabels] = useState(DEFAULT_LEVEL_LABELS);
 
   const getItemTotalWithTax = useCallback((inv, item, subtotal, taxAmount) => {
     if (!inv || !item) return 0;
@@ -186,14 +211,21 @@ export default function InvoiceDetailsPage() {
       setLoading(true);
       setError('');
       const collegeId = typeof user.college === 'object' ? (user.college._id || user.college.id || '') : String(user.college);
-      const [invResponse, collegeResponse] = await Promise.all([
+      const [invResponse, collegeResponse, levelConfigResponse] = await Promise.all([
         api.get(`${INVOICE_BASE}/${invoiceId}`, {}, true),
         api.get(`/colleges/${collegeId}`, {}, true).catch(() => ({ data: null })),
+        api.get(`/academic/config/${collegeId}`).catch(() => ({ data: null })),
       ]);
       const data = invResponse?.data || invResponse;
       setInvoice(data);
       const collegeData = collegeResponse?.data || collegeResponse;
       if (collegeData) setCollege(collegeData);
+      const levelConfigData = levelConfigResponse?.data || levelConfigResponse || {};
+      if (levelConfigData.levelNames) {
+        setLevelLabels(normalizeLevelLabels(levelConfigData.levelNames));
+      } else {
+        setLevelLabels(DEFAULT_LEVEL_LABELS);
+      }
 
       // Fetch student details if available
       if (data.student) {
@@ -260,6 +292,8 @@ export default function InvoiceDetailsPage() {
         terms: invoice.terms,
         student: invoice.student?._id || invoice.student || undefined,
         savedContent: invoice.savedContent?._id || invoice.savedContent || undefined,
+        category: financeCategoryId(invoice.category) || undefined,
+        courseDetails: getCourseDetails(invoice, student),
       };
       await api.put(`${INVOICE_BASE}/${invoiceId}`, payload, {}, true);
       await fetchInvoiceDetails();
@@ -283,10 +317,10 @@ export default function InvoiceDetailsPage() {
       (sum, item) => sum + (Number(item.amount) || 0),
       0
     );
-    
+
     let taxAmount = 0;
     const taxCalculationMethod = invoice.taxCalculationMethod || 'total';
-    
+
     if (taxCalculationMethod === 'product') {
       // Product-level tax: sum of all item taxAmounts
       taxAmount = (invoice.items || []).reduce(
@@ -298,20 +332,20 @@ export default function InvoiceDetailsPage() {
       const taxRate = invoice.taxRate || 0;
       taxAmount = (subtotal * taxRate) / 100;
     }
-    
+
     const discount = invoice.discount || 0;
     const totalAmount = subtotal + taxAmount - discount;
     const paidAmount = invoice.paidAmount || 0;
     const balanceAmount = totalAmount - paidAmount;
-    return { 
-      subtotal, 
-      taxRate: invoice.taxRate || 0, 
-      taxAmount, 
+    return {
+      subtotal,
+      taxRate: invoice.taxRate || 0,
+      taxAmount,
       taxCalculationMethod,
-      discount, 
-      totalAmount, 
-      paidAmount, 
-      balanceAmount 
+      discount,
+      totalAmount,
+      paidAmount,
+      balanceAmount
     };
   }, [invoice]);
 
@@ -327,6 +361,7 @@ export default function InvoiceDetailsPage() {
 
   const getPrintBodyHtml = useCallback(() => {
     if (!invoice) return '';
+    const courseDetails = getCourseDetails(invoice, student);
     const statusClass = invoice.status === 'paid' ? 'paid' : invoice.status === 'overdue' ? 'overdue' : invoice.status === 'sent' ? 'sent' : invoice.status === 'pending' ? 'pending' : 'draft';
     const collegeName = college?.name || 'Institution';
     const collegeAddr = [college?.address, [college?.city, college?.state, college?.pincode].filter(Boolean).join(', ')].filter(Boolean).join(' — ');
@@ -366,10 +401,12 @@ export default function InvoiceDetailsPage() {
       : '';
 
     const billToLines = [];
-    if (invoice.billTo?.name) billToLines.push(`<p><strong>${invoice.billTo.name}</strong></p>`);
+    if (invoice.billTo?.name) {
+      const studentRef = student?.studentId || student?.rollNumber || null;
+      billToLines.push(`<p><strong>${invoice.billTo.name}</strong> ${studentRef ? `(${studentRef})` : ''}</p>`);
+    }
     if (invoice.billTo?.address) billToLines.push(`<p>${invoice.billTo.address}</p>`);
-    if (invoice.billTo?.email) billToLines.push(`<p>${invoice.billTo.email}</p>`);
-    if (invoice.billTo?.phone) billToLines.push(`<p>${invoice.billTo.phone}</p>`);
+    if (invoice.billTo?.email) billToLines.push(`<p> Email: ${invoice.billTo.email} ${invoice.billTo?.phone ? `, Phone: ${invoice.billTo.phone}` : ''}</p>`);
 
     return `
       <div class="print-college-header">
@@ -392,13 +429,16 @@ export default function InvoiceDetailsPage() {
         <div class="print-section">
           <h3>Bill To</h3>
           ${billToLines.length ? billToLines.join('') : '<p>—</p>'}
+          ${courseDetails.courseName ? `<p><strong>Batch:</strong> ${courseDetails.courseName.replace(/</g, '&lt;')}</p>` : ''}
+          ${['A', 'B', 'C'].map((k) => courseDetails[`level${k}`] ? `<strong>${String(levelLabels[k] || DEFAULT_LEVEL_LABELS[k]).replace(/</g, '&lt;')}:</strong> ${courseDetails[`level${k}`].replace(/</g, '&lt;')}` : '').filter(Boolean).join('&nbsp;&nbsp;&nbsp;')}
+          
         </div>
         <div class="print-section">
           <h3>Invoice Details</h3>
           <p><strong>Invoice Date:</strong> ${formatDateForDisplay(invoice.invoiceDate)}</p>
           ${invoice.dueDate ? `<p><strong>Due Date:</strong> ${formatDateForDisplay(invoice.dueDate)}</p>` : ''}
-          ${student ? `<p><strong>Student:</strong> ${student.name} (${student.studentId || student.rollNumber || 'N/A'})</p>` : ''}
-          ${account ? `<p><strong>Account:</strong> ${account.name}</p>` : ''}
+  ${account ? `<p><strong>Account:</strong> ${account.name}</p>` : ''}
+          ${invoice.category ? `<p><strong>Category:</strong> ${(typeof invoice.category === 'object' && invoice.category?.name ? String(invoice.category.name) : financeCategoryId(invoice.category)).replace(/</g, '&lt;')}</p>` : ''}
         </div>
       </div>
       ${(invoice.items && invoice.items.length) ? `
@@ -437,7 +477,7 @@ export default function InvoiceDetailsPage() {
         <p style="margin-top:6px">Generated on ${formatDateForDisplay(new Date())}</p>
       </div>
     `;
-  }, [invoice, college, collegeLogoUrl, student, account, totals, getItemTotalWithTax, hasItemDiscount, showQuantityAndUnitPrice]);
+  }, [invoice, college, collegeLogoUrl, student, account, totals, getItemTotalWithTax, hasItemDiscount, showQuantityAndUnitPrice, levelLabels]);
 
   // Export to CSV
   const handleExportCSV = useCallback(() => {
@@ -445,19 +485,26 @@ export default function InvoiceDetailsPage() {
     setExporting(true);
     try {
       const csvRows = [];
-      
+
       // Header
       csvRows.push(['Invoice Details']);
       csvRows.push([]);
-      
+
       // Basic Information
       csvRows.push(['Invoice Number', invoice.invoiceNumber || '']);
       csvRows.push(['Invoice Date', formatDateForCSV(invoice.invoiceDate)]);
       csvRows.push(['Due Date', formatDateForCSV(invoice.dueDate)]);
       csvRows.push(['Status', invoice.status || '']);
       csvRows.push(['Created Date', formatDateForCSV(invoice.createdAt)]);
+      if (invoice.category) {
+        const catLabel =
+          typeof invoice.category === 'object' && invoice.category?.name
+            ? invoice.category.name
+            : financeCategoryId(invoice.category);
+        csvRows.push(['Finance category', catLabel]);
+      }
       csvRows.push([]);
-      
+
       // Bill To Information
       if (invoice.billTo) {
         csvRows.push(['Bill To Information']);
@@ -467,15 +514,24 @@ export default function InvoiceDetailsPage() {
         csvRows.push(['Phone', invoice.billTo.phone || '']);
         csvRows.push([]);
       }
-      
+
       // Student Information
+      const courseDetails = getCourseDetails(invoice, student);
       if (student) {
         csvRows.push(['Student Information']);
         csvRows.push(['Name', student.name || '']);
         csvRows.push(['Student ID', student.studentId || student.rollNumber || '']);
         csvRows.push([]);
       }
-      
+      if (courseDetails.courseName || courseDetails.levelA || courseDetails.levelB || courseDetails.levelC) {
+        csvRows.push(['Course Information']);
+        csvRows.push(['Course', courseDetails.courseName || '']);
+        csvRows.push([levelLabels.A || DEFAULT_LEVEL_LABELS.A, courseDetails.levelA || '']);
+        csvRows.push([levelLabels.B || DEFAULT_LEVEL_LABELS.B, courseDetails.levelB || '']);
+        csvRows.push([levelLabels.C || DEFAULT_LEVEL_LABELS.C, courseDetails.levelC || '']);
+        csvRows.push([]);
+      }
+
       // Items
       if (invoice.items && invoice.items.length > 0) {
         csvRows.push(['Items']);
@@ -500,7 +556,7 @@ export default function InvoiceDetailsPage() {
         });
         csvRows.push([]);
       }
-      
+
       // Financial Summary
       csvRows.push(['Financial Summary']);
       csvRows.push(['Subtotal', totals?.subtotal || 0]);
@@ -510,12 +566,12 @@ export default function InvoiceDetailsPage() {
       csvRows.push(['Total Amount', totals?.totalAmount || 0]);
       csvRows.push(['Paid Amount', totals?.paidAmount || 0]);
       csvRows.push(['Balance Amount', totals?.balanceAmount || 0]);
-      
+
       // Convert to CSV string
-      const csvContent = csvRows.map((row) => 
+      const csvContent = csvRows.map((row) =>
         row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')
       ).join('\n');
-      
+
       // Download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -532,7 +588,7 @@ export default function InvoiceDetailsPage() {
     } finally {
       setExporting(false);
     }
-  }, [invoice, student, totals, invoiceId]);
+  }, [invoice, student, totals, invoiceId, levelLabels]);
 
   // Export to PDF (using browser print with professional styling and college header)
   const handleExportPDF = useCallback(() => {
@@ -632,6 +688,7 @@ export default function InvoiceDetailsPage() {
     pending: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
     draft: 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
   };
+  const courseDetails = getCourseDetails(invoice, student);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -653,9 +710,8 @@ export default function InvoiceDetailsPage() {
                 Invoice {invoice.invoiceNumber || 'Details'}
               </h1>
               <span
-                className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
-                  statusColors[invoice.status] || statusColors.draft
-                }`}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${statusColors[invoice.status] || statusColors.draft
+                  }`}
               >
                 {invoice.status}
               </span>
@@ -722,7 +778,7 @@ export default function InvoiceDetailsPage() {
             <CreditCard className="h-4 w-4" />
             Record Payment
           </Button>
-          
+
         </div>
       </div>
 
@@ -765,17 +821,16 @@ export default function InvoiceDetailsPage() {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Invoice</p>
               <p className="text-2xl font-bold text-foreground">{invoice.invoiceNumber || 'N/A'}</p>
               <span
-                className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                  invoice.status === 'paid'
-                    ? 'bg-green-500 text-white'
-                    : invoice.status === 'overdue'
+                className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold capitalize ${invoice.status === 'paid'
+                  ? 'bg-green-500 text-white'
+                  : invoice.status === 'overdue'
                     ? 'bg-red-500 text-white'
                     : invoice.status === 'sent'
-                    ? 'bg-blue-500 text-white'
-                    : invoice.status === 'pending'
-                    ? 'bg-yellow-500 text-white'
-                    : 'bg-gray-500 text-white'
-                }`}
+                      ? 'bg-blue-500 text-white'
+                      : invoice.status === 'pending'
+                        ? 'bg-yellow-500 text-white'
+                        : 'bg-gray-500 text-white'
+                  }`}
               >
                 {invoice.status}
               </span>
@@ -784,256 +839,295 @@ export default function InvoiceDetailsPage() {
         </div>
 
         <div className="p-8 space-y-8 print:p-6">
-        {/* Invoice title strip */}
-        <div className="border-b border-border pb-6">
-          <h2 className="text-lg font-semibold text-muted-foreground uppercase tracking-wide">Tax Invoice / Bill of Supply</h2>
-        </div>
 
-        {/* Invoice Information Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Bill To */}
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-              Bill To
-            </h3>
-            <div className="space-y-2">
-              {invoice.billTo?.name && (
-                <p className="font-semibold text-lg">{invoice.billTo.name}</p>
-              )}
-              {invoice.billTo?.address && (
-                <p className="text-muted-foreground">{invoice.billTo.address}</p>
-              )}
-              {invoice.billTo?.email && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="h-4 w-4" />
-                  <p>{invoice.billTo.email}</p>
+
+          {/* Invoice Information Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Bill To */}
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                Bill To
+              </h3>
+              <div className="space-y-2 text-sm">
+                {invoice.billTo?.name && (
+                  <p className="font-bold text-lg text-foreground">
+                    {invoice.billTo.name} {student?.studentId || student?.rollNumber ? `(${student?.studentId || student?.rollNumber})` : ''}
+                  </p>
+                )}
+               
+                {invoice.billTo?.address && (
+                  <div className="grid grid-cols-[auto_1fr] items-start gap-x-2">
+                    <span className="text-muted-foreground">Address:</span>
+                    <span className="font-bold text-foreground break-words">{invoice.billTo.address}</span>
+                  </div>
+
+                )}
+                {(invoice.billTo?.email || invoice.billTo?.phone) && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+                    {invoice.billTo?.email && (
+                      <span className="inline-flex items-center gap-2">
+
+                        <span className="text-muted-foreground">Email:  </span><span className="font-bold text-foreground">{invoice.billTo.email}</span>
+                      </span>
+                    )}
+                    {invoice.billTo?.phone && (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-muted-foreground">Phone: <span className="font-bold text-foreground">{invoice.billTo.phone}</span></span>
+                      </span>
+                    )}
+                  </div>
+                )}
+                 {(courseDetails.courseName || courseDetails.levelA || courseDetails.levelB || courseDetails.levelC) && (
+                  <div className="pt-1 text-sm leading-6">
+                    {courseDetails.courseName && (
+                      <p>
+                        <span className="text-muted-foreground">Batch:</span>{' '}
+                        <span className="font-bold text-foreground">{courseDetails.courseName}</span>
+                      </p>
+                    )}
+                    {['A', 'B', 'C'].some((k) => courseDetails[`level${k}`]) && (
+                      <p>
+                        {['A', 'B', 'C'].map((k) =>
+                          courseDetails[`level${k}`] ? (
+                            <span key={k} className="mr-4 last:mr-0">
+                              <span className="text-muted-foreground">{levelLabels[k] || DEFAULT_LEVEL_LABELS[k]}:</span>{' '}
+                              <span className="font-bold text-foreground">{courseDetails[`level${k}`]}</span>
+                            </span>
+                          ) : null
+                        )}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+
+            {/* Invoice Details */}
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                Invoice Details
+              </h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Invoice Date:</span>
+                  <span className="font-bold text-foreground">{formatDateForDisplay(invoice.invoiceDate)}</span>
                 </div>
-              )}
-              {invoice.billTo?.phone && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="h-4 w-4" />
-                  <p>{invoice.billTo.phone}</p>
-                </div>
-              )}
+                {invoice.dueDate && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Due Date:</span>
+                    <span className="font-bold text-foreground">{formatDateForDisplay(invoice.dueDate)}</span>
+                  </div>
+                )}
+
+                {account && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Account:</span>
+                    <span className="font-bold text-foreground">{account.name}</span>
+                  </div>
+                )}
+                {invoice.category && (
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-muted-foreground shrink-0 flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5" />
+                      Category:
+                    </span>
+                    <span className="font-bold text-foreground text-right">
+                      {typeof invoice.category === 'object' && invoice.category?.name
+                        ? invoice.category.name
+                        : financeCategoryId(invoice.category) || '—'}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+          {/* Invoice title strip */}
+          <div className="border-b border-border pb-6">
+            <h2 className="text-lg font-semibold text-muted-foreground uppercase tracking-wide">Invoice</h2>
+          </div>
+          {/* Items Table */}
+          {invoice.items && invoice.items.length > 0 && (
+            <div>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-muted border-b-2 border-border">
+                    <th className="text-left p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Description
+                    </th>
+                    {showQuantityAndUnitPrice && (
+                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Quantity
+                      </th>
+                    )}
+                    {showQuantityAndUnitPrice && (
+                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Cost/Fee (₹)
+                      </th>
+                    )}
+                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Total (₹)
+                    </th>
+                    {hasItemDiscount && (
+                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Discount
+                      </th>
+                    )}
+                    {totals?.taxCalculationMethod === 'product' && (
+                      <>
+                        <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          Tax Rate
+                        </th>
+                        <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          Tax Amount
+                        </th>
+                      </>
+                    )}
+                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Paid
+                    </th>
+                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      Balance
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.items.map((item, index) => {
+                    const itemAmount = item.amount || 0;
+                    const itemDiscount = Number(item.discount) || 0;
+                    const itemTotalWithTax = getItemTotalWithTax(invoice, item, totals?.subtotal || 0, totals?.taxAmount || 0);
+                    const itemPaid = item.paidAmount || 0;
+                    const itemBalance = itemTotalWithTax - itemPaid;
+                    return (
+                      <tr key={index} className="border-b border-border hover:bg-muted/50">
+                        <td className="p-2 text-sm font-medium">{item.description || '-'}</td>
+                        {showQuantityAndUnitPrice && (
+                          <td className="p-2 text-sm text-right">{item.quantity || 0}</td>
+                        )}
+                        {showQuantityAndUnitPrice && (
+                          <td className="p-2 text-sm text-right">{formatCurrency(item.unitPrice || 0)}</td>
+                        )}
+                        <td className="p-2 text-sm text-right font-semibold">
+                          {formatCurrency(itemAmount)}
+                        </td>
+                        {hasItemDiscount && (
+                          <td className="p-2 text-sm text-right text-muted-foreground">
+                            {itemDiscount > 0 ? `-${formatCurrency(itemDiscount)}` : '-'}
+                          </td>
+                        )}
+                        {totals?.taxCalculationMethod === 'product' && (
+                          <>
+                            <td className="p-2 text-sm text-right text-muted-foreground">
+                              {item.taxRate ? `${item.taxRate}%` : '-'}
+                            </td>
+                            <td className="p-2 text-sm text-right text-muted-foreground">
+                              {formatCurrency(item.taxAmount || 0)}
+                            </td>
+                          </>
+                        )}
+                        <td className="p-2 text-sm text-right">
+                          <span className={itemPaid > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
+                            {formatCurrency(itemPaid)}
+                          </span>
+                        </td>
+                        <td className="p-2 text-sm text-right">
+                          <span className={itemBalance > 0 ? 'text-red-600 font-medium' : itemBalance < 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
+                            {formatCurrency(itemBalance)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          {/* Invoice Details */}
-          <div>
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-              Invoice Details
-            </h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Invoice Date:</span>
-                <span className="font-medium">{formatDateForDisplay(invoice.invoiceDate)}</span>
+          {/* Summary Section */}
+          <div className="flex justify-end">
+            <div className="w-full md:w-72 space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Subtotal:</span>
+                <span className="font-medium text-foreground">
+                  {formatCurrency(totals?.subtotal || 0)}
+                </span>
               </div>
-              {invoice.dueDate && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Due Date:</span>
-                  <span className="font-medium">{formatDateForDisplay(invoice.dueDate)}</span>
-                </div>
-              )}
-              {student && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Student:</span>
-                  <span className="font-medium">
-                    {student.name} ({student.studentId || student.rollNumber || 'N/A'})
+              {totals && totals.taxAmount > 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {totals.taxCalculationMethod === 'product'
+                      ? 'Tax (Product-Level):'
+                      : `Tax (${totals.taxRate}%):`}
+                  </span>
+                  <span className="font-medium text-foreground">
+                    {formatCurrency(totals.taxAmount || 0)}
                   </span>
                 </div>
               )}
-              {account && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Account:</span>
-                  <span className="font-medium">{account.name}</span>
+              {totals && totals.discount > 0 && (
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Discount:</span>
+                  <span className="font-medium text-red-600">
+                    -{formatCurrency(totals.discount || 0)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between text-base font-bold pt-3 border-t border-border mt-1">
+                <span>Total Amount:</span>
+                <span className="text-primary">
+                  {formatCurrency(totals?.totalAmount || invoice.totalAmount || 0)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground pt-1">
+                <span>Paid Amount:</span>
+                <span className="font-medium text-green-600">
+                  {formatCurrency(totals.paidAmount || invoice.paidAmount || 0)}
+                </span>
+              </div>
+              <div
+                className={`flex justify-between text-base font-semibold pt-2 border-t border-border ${totals && totals.balanceAmount > 0
+                  ? 'text-red-600'
+                  : totals && totals.balanceAmount < 0
+                    ? 'text-green-600'
+                    : 'text-foreground'
+                  }`}
+              >
+                <span>Balance:</span>
+                <span>
+                  {formatCurrency(totals?.balanceAmount || invoice.balanceAmount || 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Notes and Terms */}
+          {(invoice.notes || invoice.terms) && (
+            <div className="border-t border-border pt-6 space-y-6">
+              {invoice.notes && (
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Notes
+                  </h3>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{invoice.notes}</p>
+                </div>
+              )}
+              {invoice.terms && (
+                <div>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Terms & Conditions
+                  </h3>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{invoice.terms}</p>
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Items Table */}
-        {invoice.items && invoice.items.length > 0 && (
-          <div>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-muted border-b-2 border-border">
-                  <th className="text-left p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Description
-                  </th>
-                  {showQuantityAndUnitPrice && (
-                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Quantity
-                    </th>
-                  )}
-                  {showQuantityAndUnitPrice && (
-                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Cost/Fee (₹)
-                    </th>
-                  )}
-                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Total (₹)
-                  </th>
-                  {hasItemDiscount && (
-                    <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Discount
-                    </th>
-                  )}
-                  {totals?.taxCalculationMethod === 'product' && (
-                    <>
-                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        Tax Rate
-                      </th>
-                      <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        Tax Amount
-                      </th>
-                    </>
-                  )}
-                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Paid
-                  </th>
-                  <th className="text-right p-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                    Balance
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.items.map((item, index) => {
-                  const itemAmount = item.amount || 0;
-                  const itemDiscount = Number(item.discount) || 0;
-                  const itemTotalWithTax = getItemTotalWithTax(invoice, item, totals?.subtotal || 0, totals?.taxAmount || 0);
-                  const itemPaid = item.paidAmount || 0;
-                  const itemBalance = itemTotalWithTax - itemPaid;
-                  return (
-                    <tr key={index} className="border-b border-border hover:bg-muted/50">
-                      <td className="p-2 text-sm font-medium">{item.description || '-'}</td>
-                      {showQuantityAndUnitPrice && (
-                        <td className="p-2 text-sm text-right">{item.quantity || 0}</td>
-                      )}
-                      {showQuantityAndUnitPrice && (
-                        <td className="p-2 text-sm text-right">{formatCurrency(item.unitPrice || 0)}</td>
-                      )}
-                      <td className="p-2 text-sm text-right font-semibold">
-                        {formatCurrency(itemAmount)}
-                      </td>
-                      {hasItemDiscount && (
-                        <td className="p-2 text-sm text-right text-muted-foreground">
-                          {itemDiscount > 0 ? `-${formatCurrency(itemDiscount)}` : '-'}
-                        </td>
-                      )}
-                      {totals?.taxCalculationMethod === 'product' && (
-                        <>
-                          <td className="p-2 text-sm text-right text-muted-foreground">
-                            {item.taxRate ? `${item.taxRate}%` : '-'}
-                          </td>
-                          <td className="p-2 text-sm text-right text-muted-foreground">
-                            {formatCurrency(item.taxAmount || 0)}
-                          </td>
-                        </>
-                      )}
-                      <td className="p-2 text-sm text-right">
-                        <span className={itemPaid > 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
-                          {formatCurrency(itemPaid)}
-                        </span>
-                      </td>
-                      <td className="p-2 text-sm text-right">
-                        <span className={itemBalance > 0 ? 'text-red-600 font-medium' : itemBalance < 0 ? 'text-green-600 font-medium' : 'text-muted-foreground'}>
-                          {formatCurrency(itemBalance)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          {/* Footer */}
+          <div className="border-t border-border pt-6 text-center text-sm text-muted-foreground">
+            <p>This is a computer-generated invoice. No signature required.</p>
+            <p className="mt-1">Generated on {formatDateForDisplay(new Date())}</p>
           </div>
-        )}
-
-        {/* Summary Section */}
-        <div className="flex justify-end">
-          <div className="w-full md:w-72 space-y-1.5">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Subtotal:</span>
-              <span className="font-medium text-foreground">
-                {formatCurrency(totals?.subtotal || 0)}
-              </span>
-            </div>
-            {totals && totals.taxAmount > 0 && (
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>
-                  {totals.taxCalculationMethod === 'product' 
-                    ? 'Tax (Product-Level):' 
-                    : `Tax (${totals.taxRate}%):`}
-                </span>
-                <span className="font-medium text-foreground">
-                  {formatCurrency(totals.taxAmount || 0)}
-                </span>
-              </div>
-            )}
-            {totals && totals.discount > 0 && (
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Discount:</span>
-                <span className="font-medium text-red-600">
-                  -{formatCurrency(totals.discount || 0)}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between text-base font-bold pt-3 border-t border-border mt-1">
-              <span>Total Amount:</span>
-              <span className="text-primary">
-                {formatCurrency(totals?.totalAmount || invoice.totalAmount || 0)}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground pt-1">
-              <span>Paid Amount:</span>
-              <span className="font-medium text-green-600">
-                {formatCurrency(totals.paidAmount || invoice.paidAmount || 0)}
-              </span>
-            </div>
-            <div
-              className={`flex justify-between text-base font-semibold pt-2 border-t border-border ${
-                totals && totals.balanceAmount > 0
-                  ? 'text-red-600'
-                  : totals && totals.balanceAmount < 0
-                  ? 'text-green-600'
-                  : 'text-foreground'
-              }`}
-            >
-              <span>Balance:</span>
-              <span>
-                {formatCurrency(totals?.balanceAmount || invoice.balanceAmount || 0)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Notes and Terms */}
-        {(invoice.notes || invoice.terms) && (
-          <div className="border-t border-border pt-6 space-y-6">
-            {invoice.notes && (
-              <div>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Notes
-                </h3>
-                <p className="text-muted-foreground whitespace-pre-wrap">{invoice.notes}</p>
-              </div>
-            )}
-            {invoice.terms && (
-              <div>
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Terms & Conditions
-                </h3>
-                <p className="text-muted-foreground whitespace-pre-wrap">{invoice.terms}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="border-t border-border pt-6 text-center text-sm text-muted-foreground">
-          <p>This is a computer-generated invoice. No signature required.</p>
-          <p className="mt-1">Generated on {formatDateForDisplay(new Date())}</p>
-        </div>
         </div>
       </div>
 
@@ -1070,13 +1164,12 @@ export default function InvoiceDetailsPage() {
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Balance</p>
               <p
-                className={`text-xl font-bold mt-1.5 tabular-nums ${
-                  totals && totals.balanceAmount > 0
-                    ? 'text-red-600'
-                    : totals && totals.balanceAmount < 0
+                className={`text-xl font-bold mt-1.5 tabular-nums ${totals && totals.balanceAmount > 0
+                  ? 'text-red-600'
+                  : totals && totals.balanceAmount < 0
                     ? 'text-green-600'
                     : 'text-primary'
-                }`}
+                  }`}
               >
                 {formatCurrency(totals?.balanceAmount || invoice.balanceAmount || 0)}
               </p>

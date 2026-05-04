@@ -12,9 +12,9 @@ import {
   X,
   RefreshCcw,
   Search,
-  User,
   Receipt,
   DollarSign,
+  Layers,
 } from 'lucide-react';
 import {
   Dialog,
@@ -28,10 +28,21 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 const SAVED_CONTENT_BASE = '/finance/saved-invoice-contents';
+const FINANCE_CATEGORIES_BASE = '/finance/categories';
+
+/** @param {unknown} ref */
+const financeCategoryId = (ref) => {
+  if (ref == null || ref === '') return '';
+  if (typeof ref === 'object' && ref !== null) {
+    return String(ref._id || ref.id || '');
+  }
+  return String(ref);
+};
 
 const EMPTY_CONTENT = {
   name: '',
   description: '',
+  category: '',
   billTo: {
     name: '',
     address: '',
@@ -63,6 +74,7 @@ export default function SavedInvoiceContentsPage() {
   const [filterActive, setFilterActive] = useState('');
 
   const [contentForm, setContentForm] = useState(EMPTY_CONTENT);
+  const [financeCategories, setFinanceCategories] = useState([]);
   const itemDiscountSum = useMemo(
     () => (contentForm.items || []).reduce((sum, item) => sum + (Number(item.discount) || 0), 0),
     [contentForm.items],
@@ -88,11 +100,18 @@ export default function SavedInvoiceContentsPage() {
 
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        list = list.filter(
-          (c) =>
+        list = list.filter((c) => {
+          const cat = c.category;
+          const catLabel =
+            typeof cat === 'object' && cat?.name
+              ? String(cat.name).toLowerCase()
+              : '';
+          return (
             c.name?.toLowerCase().includes(term) ||
-            c.description?.toLowerCase().includes(term),
-        );
+            c.description?.toLowerCase().includes(term) ||
+            catLabel.includes(term)
+          );
+        });
       }
 
       setContents(list);
@@ -103,10 +122,29 @@ export default function SavedInvoiceContentsPage() {
     }
   }, [user?.college, filterActive, searchTerm]);
 
+  const fetchFinanceCategories = useCallback(async () => {
+    if (!user?.college) return;
+    try {
+      const params = new URLSearchParams();
+      params.set('isActive', 'true');
+      params.set('type', 'income');
+      const res = await api.get(`${FINANCE_CATEGORIES_BASE}?${params.toString()}`, {}, true);
+      const data = res?.data ?? res ?? [];
+      setFinanceCategories(Array.isArray(data) ? data : []);
+    } catch {
+      setFinanceCategories([]);
+    }
+  }, [user?.college]);
+
   useEffect(() => {
     if (!user?.college) return;
     fetchContents();
   }, [user?.college, fetchContents]);
+
+  useEffect(() => {
+    if (!user?.college) return;
+    fetchFinanceCategories();
+  }, [user?.college, fetchFinanceCategories]);
 
   const resetForm = useCallback(() => {
     setContentForm(EMPTY_CONTENT);
@@ -227,6 +265,10 @@ export default function SavedInvoiceContentsPage() {
         isActive: !!contentForm.isActive,
       };
 
+      const cat = (contentForm.category || '').trim();
+      if (cat) payload.category = cat;
+      else if (editingContent?._id) payload.category = null;
+
       if (editingContent?._id) {
         await api.put(
           `${SAVED_CONTENT_BASE}/${editingContent._id}`,
@@ -272,6 +314,7 @@ export default function SavedInvoiceContentsPage() {
       notes: content.notes || '',
       terms: content.terms || '',
       isActive: content.isActive ?? true,
+      category: financeCategoryId(content.category),
     });
     setShowForm(true);
   };
@@ -421,6 +464,28 @@ export default function SavedInvoiceContentsPage() {
                   placeholder="Brief description of this fee structure"
                   className="h-9"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
+                  <Layers className="h-3.5 w-3.5" />
+                  Finance category
+                </label>
+                <select
+                  name="category"
+                  value={contentForm.category}
+                  onChange={handleFormChange}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">None</option>
+                  {financeCategories.map((cat) => (
+                    <option key={cat._id} value={cat._id}>
+                      {cat.name || cat._id}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Income categories from Finance → Categories. Used when posting this fee to the ledger.
+                </p>
               </div>
             </div>
           </section>
@@ -775,6 +840,22 @@ export default function SavedInvoiceContentsPage() {
                       {content.description}
                     </p>
                   )}
+                  {(() => {
+                    const c = content.category;
+                    const label =
+                      typeof c === 'object' && c?.name ? c.name : null;
+                    const id = financeCategoryId(content.category);
+                    const fallback =
+                      id && financeCategories.find((x) => String(x._id) === id)?.name;
+                    const show = label || fallback;
+                    if (!show) return null;
+                    return (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
+                        <Layers className="h-3.5 w-3.5 shrink-0" />
+                        <span>{show}</span>
+                      </p>
+                    );
+                  })()}
                   <p className="text-sm text-muted-foreground">
                     {content.items?.length || 0} items • Tax Method:{' '}
                     {content.taxCalculationMethod === 'product' ? 'Product-Level' : 'Total-Level'}
