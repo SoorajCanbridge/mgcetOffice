@@ -41,6 +41,13 @@ const formatPaymentMethodLabel = (method) => {
   return String(method).replace(/[-_]/g, ' ').trim() || 'N/A';
 };
 
+const formatTransactionId = (value) => {
+  if (value === null || value === undefined) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  return /^\d+$/.test(raw) ? raw.padStart(4, '0') : raw;
+};
+
 const formatAccountTypeLabel = (t) => {
   if (!t) return '—';
   return String(t).charAt(0).toUpperCase() + String(t).slice(1);
@@ -127,7 +134,12 @@ const RECEIPT_PRINT_STYLES = `
   }
   body.pr-print-two-on-one .pr-chip { padding: 2px 5px; gap: 3px; border-radius: 4px; }
   body.pr-print-two-on-one .pr-chip-k { font-size: 7.5px; }
-  body.pr-print-two-on-one .pr-title-center { display: none; }
+  body.pr-print-two-on-one .pr-title-center {
+    display: block;
+    font-size: 9px;
+    margin: 0 0 4px;
+    letter-spacing: 0.12em;
+  }
   body.pr-print-two-on-one .pr-body { padding: 5px 8px 5px; }
   body.pr-print-two-on-one .pr-grid { gap: 5px; margin-bottom: 5px; }
   body.pr-print-two-on-one .pr-panel { padding: 5px 7px; border-radius: 5px; }
@@ -642,7 +654,7 @@ export default function PaymentDetailsPage() {
         }
       }
       if (payment.referenceNumber) rows.push(['Reference Number', payment.referenceNumber]);
-      if (payment.transactionId) rows.push(['Transaction ID', payment.transactionId]);
+      if (payment.transactionId) rows.push(['Transaction ID', formatTransactionId(payment.transactionId)]);
       if (payment.description) rows.push(['Description', payment.description]);
 
       const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -693,7 +705,7 @@ export default function PaymentDetailsPage() {
       : `<p style="color:#94a3b8;font-size:9px;margin:0">—</p>`;
 
     const detailRows = [
-      payment.transactionId && { k: 'Transaction ID', v: esc(payment.transactionId) },
+      payment.transactionId && { k: 'Transaction ID', v: esc(formatTransactionId(payment.transactionId)) },
       payment.chequeNumber && {
         k: 'Cheque',
         v: `${esc(payment.chequeNumber)}${payment.chequeDate ? ' · ' + formatDateForDisplay(payment.chequeDate) : ''}`,
@@ -1166,7 +1178,7 @@ export default function PaymentDetailsPage() {
                 {[
                   !hasAmountSplits && { label: 'Payment Method', value: formatPaymentMethodLabel(payment.paymentMethod) },
                   payment.referenceNumber && { label: 'Reference No.', value: payment.referenceNumber },
-                  payment.transactionId && { label: 'Transaction ID', value: payment.transactionId, mono: true },
+                  payment.transactionId && { label: 'Transaction ID', value: formatTransactionId(payment.transactionId), mono: true },
                   payment.chequeNumber && { label: 'Cheque No.', value: payment.chequeNumber },
                   payment.chequeDate && { label: 'Cheque Date', value: formatDateForDisplay(payment.chequeDate) },
                   payment.bankName && { label: 'Bank Name', value: payment.bankName },

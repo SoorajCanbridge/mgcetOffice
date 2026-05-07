@@ -92,6 +92,13 @@ const formatDateForDisplay = (date) => {
   }
 };
 
+const formatTransactionId = (value) => {
+  if (value === null || value === undefined) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  return /^\d+$/.test(raw) ? raw.padStart(4, '0') : raw;
+};
+
 export default function PaymentsPage() {
   const router = useRouter();
   const { user } = useAuth();
@@ -524,6 +531,7 @@ export default function PaymentsPage() {
       header: 'Transaction ID',
       type: 'text',
       searchable: true,
+      cell: ({ row }) => formatTransactionId(row.transactionId) || '-',
     },
     {
       id: 'category',

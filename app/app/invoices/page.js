@@ -291,7 +291,7 @@ export default function InvoicesPage() {
 
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 10,
     total: 0,
     pages: 0,
   });
@@ -380,10 +380,12 @@ export default function InvoicesPage() {
     try {
       const params = new URLSearchParams();
       params.set('isActive', 'true');
-      params.set('type', 'income');
       const response = await api.get(`/finance/categories?${params.toString()}`, {}, true);
       const data = response?.data || response || [];
-      setFinanceCategories(Array.isArray(data) ? data : []);
+      const categoryList = Array.isArray(data) ? data : [];
+      setFinanceCategories(
+        categoryList.filter((c) => c?.type === 'income' || c?.type === 'both'),
+      );
     } catch (err) {
       console.error('Failed to load finance categories:', err);
       setFinanceCategories([]);
@@ -395,22 +397,66 @@ export default function InvoicesPage() {
     try {
       setLoading(true);
       setError('');
-      const params = new URLSearchParams();
+      const baseParams = new URLSearchParams();
+      if (filters.status) baseParams.append('status', filters.status);
+      if (filters.accountId) baseParams.append('accountId', filters.accountId);
+      if (filters.startDate) baseParams.append('startDate', filters.startDate);
+      if (filters.endDate) baseParams.append('endDate', filters.endDate);
 
-      if (filters.status) params.append('status', filters.status);
-      if (filters.accountId) params.append('accountId', filters.accountId);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
+      const REQUEST_LIMIT = 200;
+      const MAX_AUTO_PAGES = 50;
+      let page = 1;
+      let hasMore = true;
+      const allRows = [];
+      let lastPagination = null;
 
-      const response = await api.get(
-        `${INVOICE_BASE}?${params.toString()}`,
-        {},
-        true,
-      );
-      const data = response?.data || response || [];
-      const list = Array.isArray(data) ? data : [];
+      while (hasMore && page <= MAX_AUTO_PAGES) {
+        const params = new URLSearchParams(baseParams);
+        params.set('page', String(page));
+        params.set('limit', String(REQUEST_LIMIT));
 
-      setInvoices(list);
+        const response = await api.get(
+          `${INVOICE_BASE}?${params.toString()}`,
+          {},
+          true,
+        );
+        const payload = response?.data ?? response;
+        const pageRows = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.items)
+          ? payload.items
+          : [];
+
+        allRows.push(...pageRows);
+
+        const responsePagination = response?.pagination || payload?.pagination || null;
+        const currentPage = Number(responsePagination?.page ?? page);
+        const totalPages = Number(responsePagination?.pages ?? responsePagination?.totalPages ?? 0);
+        const nextPage = Number(responsePagination?.nextPage ?? 0);
+
+        const hasNextByMeta =
+          typeof responsePagination?.hasNextPage === 'boolean'
+            ? responsePagination.hasNextPage
+            : (nextPage > currentPage) || (totalPages > 0 && currentPage < totalPages);
+
+        const hasNextBySize = !responsePagination && pageRows.length === REQUEST_LIMIT;
+        hasMore = hasNextByMeta || hasNextBySize;
+
+        lastPagination = responsePagination;
+        if (!hasMore) break;
+        page = nextPage > currentPage ? nextPage : page + 1;
+      }
+
+      setInvoices(allRows);
+      setPagination((prev) => ({
+        ...prev,
+        page: Number(lastPagination?.page ?? 1),
+        limit: Number(lastPagination?.limit ?? prev.limit),
+        total: Number(lastPagination?.total ?? allRows.length),
+        pages: Number(lastPagination?.pages ?? lastPagination?.totalPages ?? (allRows.length ? 1 : 0)),
+      }));
     } catch (err) {
       setError(err.message || 'Failed to load invoices');
     } finally {
@@ -2191,7 +2237,7 @@ export default function InvoicesPage() {
                     ))}
                   </select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Optional income category for this invoice. Loading a template sets this from the template when present.
+                    Optional income or both-type category for this invoice. Loading a template sets this from the template when present.
                   </p>
                 </div>
               </div>
@@ -2907,8 +2953,8 @@ export default function InvoicesPage() {
           showColumnVisibility={true}
           showSettings={true}
           storageKey="invoices-table"
-          defaultPageSize={20}
-          pageSizeOptions={[10, 20, 50, 100]}
+          defaultPageSize={10}
+          pageSizeOptions={[10, 20, 50]}
           emptyMessage="No invoices found"
           // onRowClick={(row) => router.push(`/app/invoices/${row._id}`)}
         />

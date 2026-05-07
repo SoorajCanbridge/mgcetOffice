@@ -64,6 +64,19 @@ const formatCurrency = (value) => {
   }
 };
 
+const getDateOnlyKey = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10);
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+};
+
+const getTimestamp = (value) => {
+  const ts = new Date(value).getTime();
+  return Number.isFinite(ts) ? ts : 0;
+};
+
 const getRecurringStatusLabel = (status) => {
   if (status === 'overdue') return 'Overdue';
   if (status === 'paused') return 'Paused';
@@ -172,14 +185,54 @@ export default function FinanceTrackingExpensesPage() {
     try {
       setLoading(true);
       setError('');
-      const params = new URLSearchParams();
-      if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.accountId) params.append('accountId', filters.accountId);
-      if (filters.recipient) params.append('recipient', filters.recipient);
-      if (filters.startDate) params.append('startDate', filters.startDate);
-      if (filters.endDate) params.append('endDate', filters.endDate);
-      const res = await api.get(`${FINANCE_BASE}/expenses?${params.toString()}`, {}, true);
-      let list = Array.isArray(res?.data ?? res) ? (res?.data ?? res) : [];
+      const baseParams = new URLSearchParams();
+      if (filters.categoryId) baseParams.append('categoryId', filters.categoryId);
+      if (filters.accountId) baseParams.append('accountId', filters.accountId);
+      if (filters.recipient) baseParams.append('recipient', filters.recipient);
+      if (filters.startDate) baseParams.append('startDate', filters.startDate);
+      if (filters.endDate) baseParams.append('endDate', filters.endDate);
+
+      const REQUEST_LIMIT = 200;
+      const MAX_AUTO_PAGES = 50;
+      let page = 1;
+      let hasMore = true;
+      const allRows = [];
+
+      while (hasMore && page <= MAX_AUTO_PAGES) {
+        const params = new URLSearchParams(baseParams);
+        params.set('page', String(page));
+        params.set('limit', String(REQUEST_LIMIT));
+
+        const res = await api.get(`${FINANCE_BASE}/expenses?${params.toString()}`, {}, true);
+        const payload = res?.data ?? res;
+        const pageRows = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload?.items)
+          ? payload.items
+          : [];
+
+        allRows.push(...pageRows);
+
+        const pagination = res?.pagination || payload?.pagination || null;
+        const currentPage = Number(pagination?.page ?? page);
+        const totalPages = Number(pagination?.pages ?? pagination?.totalPages ?? 0);
+        const nextPage = Number(pagination?.nextPage ?? 0);
+
+        const hasNextByMeta =
+          typeof pagination?.hasNextPage === 'boolean'
+            ? pagination.hasNextPage
+            : (nextPage > currentPage) || (totalPages > 0 && currentPage < totalPages);
+
+        const hasNextBySize = !pagination && pageRows.length === REQUEST_LIMIT;
+        hasMore = hasNextByMeta || hasNextBySize;
+
+        if (!hasMore) break;
+        page = nextPage > currentPage ? nextPage : page + 1;
+      }
+
+      let list = allRows;
       if (filters.search) {
         const q = filters.search.toLowerCase();
         list = list.filter(
@@ -443,7 +496,25 @@ export default function FinanceTrackingExpensesPage() {
         </span>
       ) },
       { id: 'amount', accessorKey: 'amount', header: 'Amount', type: 'currency', formatOptions: { locale: 'en-IN', currency: 'INR' }, cell: ({ row }) => <span className="text-red-600 font-medium">{formatCurrency(row.amount)}</span> },
-      { id: 'date', accessorKey: 'date', header: 'Date', type: 'date', formatOptions: { locale: 'en-IN' } },
+      {
+        id: 'date',
+        accessorKey: 'date',
+        header: 'Date',
+        type: 'date',
+        formatOptions: { locale: 'en-IN' },
+        sortComparator: (a, b) => {
+          const aDateKey = getDateOnlyKey(a?.date);
+          const bDateKey = getDateOnlyKey(b?.date);
+          if (aDateKey < bDateKey) return -1;
+          if (aDateKey > bDateKey) return 1;
+
+          const aCreatedAt = getTimestamp(a?.createdAt);
+          const bCreatedAt = getTimestamp(b?.createdAt);
+          if (aCreatedAt < bCreatedAt) return -1;
+          if (aCreatedAt > bCreatedAt) return 1;
+          return 0;
+        },
+      },
       { id: 'category', accessorKey: 'category', header: 'Category', type: 'text', cell: ({ row }) => (row.category ? (typeof row.category === 'object' ? row.category.name : row.category) : '—') },
       { id: 'recipient', accessorKey: 'recipient', header: 'Recipient', type: 'text', cell: ({ row }) => (row.recipient && typeof row.recipient === 'object' && row.recipient.name) ? row.recipient.name : (row.vendor || '—') },
       { id: 'account', accessorKey: 'account', header: 'Account', type: 'text', cell: ({ row }) => (row.account ? (typeof row.account === 'object' ? row.account.name : row.account) : '—') },

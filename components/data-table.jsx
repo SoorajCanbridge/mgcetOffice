@@ -137,23 +137,39 @@ const applyFilters = (data, filters, columns) => {
 };
 
 // Sort function
-const applySorting = (data, sortBy, sortOrder) => {
+const applySorting = (data, columns, sortBy, sortOrder) => {
   if (!sortBy) return data;
 
-  return [...data].sort((a, b) => {
-    let aValue = a[sortBy];
-    let bValue = b[sortBy];
+  const column = columns.find((col) => (col.id || col.accessorKey) === sortBy);
+  const getValue = (row) => {
+    if (typeof column?.sortAccessor === 'function') return column.sortAccessor(row);
+    if (column?.accessorKey) return row?.[column.accessorKey];
+    if (sortBy.includes('.')) return sortBy.split('.').reduce((obj, key) => obj?.[key], row);
+    return row?.[sortBy];
+  };
 
-    // Handle nested accessors
-    if (sortBy.includes('.')) {
-      const keys = sortBy.split('.');
-      aValue = keys.reduce((obj, key) => obj?.[key], a);
-      bValue = keys.reduce((obj, key) => obj?.[key], b);
+  return [...data].sort((a, b) => {
+    if (typeof column?.sortComparator === 'function') {
+      const result = column.sortComparator(a, b);
+      return sortOrder === 'asc' ? result : -result;
     }
+
+    let aValue = getValue(a);
+    let bValue = getValue(b);
 
     // Handle null/undefined
     if (aValue === null || aValue === undefined) aValue = '';
     if (bValue === null || bValue === undefined) bValue = '';
+
+    if (column?.type === 'date' || column?.type === 'datetime') {
+      const aTime = typeof aValue === 'number' ? aValue : new Date(aValue).getTime();
+      const bTime = typeof bValue === 'number' ? bValue : new Date(bValue).getTime();
+      const validA = Number.isFinite(aTime);
+      const validB = Number.isFinite(bTime);
+      if (validA && validB) return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
+      if (validA) return sortOrder === 'asc' ? -1 : 1;
+      if (validB) return sortOrder === 'asc' ? 1 : -1;
+    }
 
     // Compare values
     if (typeof aValue === 'number' && typeof bValue === 'number') {
@@ -329,8 +345,8 @@ export function DataTable({
       });
     }
 
-    return applySorting(searchedAndFilteredData, sortBy, sortOrder);
-  }, [searchedAndFilteredData, sortable, sortBy, sortOrder, serialRankMap]);
+    return applySorting(searchedAndFilteredData, columns, sortBy, sortOrder);
+  }, [searchedAndFilteredData, columns, sortable, sortBy, sortOrder, serialRankMap]);
 
   const serverPageSize = useMemo(() => {
     if (!serverPag) return defaultPageSize;

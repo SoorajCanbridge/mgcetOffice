@@ -34,6 +34,7 @@ const EMPTY_LEDGER = {
   entryType: 'income',
   description: '',
   reference: '',
+  transactionId: '',
   category: '',
   notes: '',
   lines: [{ ...EMPTY_LINE }],
@@ -175,6 +176,7 @@ export default function LedgersPage() {
           (l) =>
             (l.description || '').toLowerCase().includes(q) ||
             (l.reference || '').toLowerCase().includes(q) ||
+            (String(l.transactionId || '')).toLowerCase().includes(q) ||
             (String(l.referenceId || '')).toLowerCase().includes(q)
         );
       }
@@ -370,6 +372,7 @@ export default function LedgersPage() {
         entryType: ledgerForm.entryType,
         description: (ledgerForm.description || '').trim() || undefined,
         reference: (ledgerForm.reference || '').trim() || undefined,
+        transactionId: (ledgerForm.transactionId || '').trim() || undefined,
         category: ledgerForm.category || undefined,
         notes: (ledgerForm.notes || '').trim() || undefined,
         lines: linesPayload,
@@ -427,7 +430,7 @@ export default function LedgersPage() {
 
   const handleExportCsv = useCallback(() => {
     if (ledgers.length === 0) return;
-    const headers = ['Date', 'Entry Type', 'Description', 'Reference', 'Account', 'Type', 'Amount', 'Balance after'];
+    const headers = ['Date', 'Entry Type', 'Description', 'Reference', 'Transaction ID', 'Account', 'Type', 'Amount', 'Balance after'];
     const rows = [];
     ledgers.forEach((l) => {
       (l.lines || []).forEach((ln) => {
@@ -436,6 +439,7 @@ export default function LedgersPage() {
           l.entryType ?? '',
           (l.description ?? '').replace(/"/g, '""'),
           ((l.reference || l.referenceId) ?? '').replace(/"/g, '""'),
+          (String(l.transactionId || '')).replace(/"/g, '""'),
           typeof ln.account === 'object' ? (ln.account?.name ?? '') : ln.account ?? '',
           ln.transactionType ?? '',
           ln.amount ?? '',
@@ -542,6 +546,13 @@ export default function LedgersPage() {
         ) : (
           '-'
         ),
+    },
+    {
+      id: 'transactionId',
+      accessorKey: 'transactionId',
+      header: 'Transaction ID',
+      searchable: true,
+      cell: ({ row }) => row.transactionId || '-',
     },
   ], []);
 
@@ -964,6 +975,16 @@ export default function LedgersPage() {
                 className="h-9"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Transaction ID</label>
+              <Input
+                name="transactionId"
+                value={ledgerForm.transactionId}
+                onChange={handleFormChange}
+                placeholder="Transaction ID"
+                className="h-9"
+              />
+            </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium mb-1">Description *</label>
               <Input
@@ -1119,6 +1140,14 @@ export default function LedgersPage() {
                       Reference ID
                     </p>
                     <p className="font-medium">{viewingLedger.referenceId}</p>
+                  </div>
+                )}
+                {viewingLedger.transactionId && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Transaction ID
+                    </p>
+                    <p className="font-medium">{viewingLedger.transactionId}</p>
                   </div>
                 )}
               {viewingLedger.description && (
