@@ -30,6 +30,7 @@ import {
 import { api, API_URL } from '@/lib/api';
 import { getUploadedImageUrl, getLogoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 
 const EXPENSES_BASE = '/finance/expenses';
 
@@ -706,6 +707,7 @@ export default function ExpenseDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchExpenseDetails = useCallback(async () => {
     if (!expenseId || !user?.college) return;
@@ -810,6 +812,22 @@ export default function ExpenseDetailsPage() {
       setExporting(false);
     }
   }, [expense, category, account, expenseId]);
+
+  const handleCancelToggle = useCallback(async () => {
+    if (!expense?._id) return;
+    const newCancelled = !expense.isCancelled;
+    if (!newCancelled && !window.confirm('Restore this expense record?')) return;
+    if (newCancelled && !window.confirm('Mark this expense as cancelled?')) return;
+    try {
+      setCancelling(true);
+      await api.put(`${EXPENSES_BASE}/${expense._id}`, { isCancelled: newCancelled }, {}, true);
+      await fetchExpenseDetails();
+    } catch (err) {
+      setError(err.message || 'Failed to update expense status');
+    } finally {
+      setCancelling(false);
+    }
+  }, [expense, fetchExpenseDetails]);
 
   const handlePrint = useCallback(() => {
     if (!expense) return;
@@ -1144,6 +1162,19 @@ export default function ExpenseDetailsPage() {
                   <span className="font-medium">{label}</span>
                 </button>
               ))}
+              <PermissionGate moduleKey="finance" action="delete">
+                <button
+                  type="button"
+                  onClick={handleCancelToggle}
+                  disabled={cancelling}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left group disabled:opacity-50 ${expense.isCancelled ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20' : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20'}`}
+                >
+                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${expense.isCancelled ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                    <XCircle className={`h-3.5 w-3.5 ${expense.isCancelled ? 'text-emerald-500' : 'text-red-500'}`} />
+                  </div>
+                  <span className="font-medium">{cancelling ? 'Updating…' : expense.isCancelled ? 'Restore expense' : 'Cancel expense'}</span>
+                </button>
+              </PermissionGate>
             </div>
           </div>
 

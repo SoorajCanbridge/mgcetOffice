@@ -29,6 +29,7 @@ import {
 import { api, API_URL } from '@/lib/api';
 import { getUploadedImageUrl, getLogoUrl } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import PermissionGate from '@/components/PermissionGate';
 
 const INCOMES_BASE = '/finance/incomes';
 
@@ -285,6 +286,7 @@ export default function IncomeDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchIncomeDetails = useCallback(async () => {
     if (!incomeId || !user?.college) return;
@@ -404,6 +406,22 @@ export default function IncomeDetailsPage() {
   }, [income, category, account, student, incomeId]);
 
   // ── Print ─────────────────────────────────────────────────────────────────
+  const handleCancelToggle = useCallback(async () => {
+    if (!income?._id) return;
+    const newCancelled = !income.isCancelled;
+    if (!newCancelled && !window.confirm('Restore this income record?')) return;
+    if (newCancelled && !window.confirm('Mark this income as cancelled?')) return;
+    try {
+      setCancelling(true);
+      await api.put(`${INCOMES_BASE}/${income._id}`, { isCancelled: newCancelled }, {}, true);
+      await fetchIncomeDetails();
+    } catch (err) {
+      setError(err.message || 'Failed to update income status');
+    } finally {
+      setCancelling(false);
+    }
+  }, [income, fetchIncomeDetails]);
+
   const handlePrint = useCallback(() => {
     if (!income) return;
     const printWindow = window.open('', '_blank');
@@ -586,6 +604,19 @@ export default function IncomeDetailsPage() {
                   <span className="font-medium">{label}</span>
                 </button>
               ))}
+              <PermissionGate moduleKey="finance" action="delete">
+                <button
+                  type="button"
+                  onClick={handleCancelToggle}
+                  disabled={cancelling}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors text-left group disabled:opacity-50 ${income.isCancelled ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20' : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20'}`}
+                >
+                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${income.isCancelled ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                    <XCircle className={`h-3.5 w-3.5 ${income.isCancelled ? 'text-emerald-500' : 'text-red-500'}`} />
+                  </div>
+                  <span className="font-medium">{cancelling ? 'Updating…' : income.isCancelled ? 'Restore income' : 'Cancel income'}</span>
+                </button>
+              </PermissionGate>
             </div>
           </div>
 

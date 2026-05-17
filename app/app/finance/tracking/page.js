@@ -278,10 +278,15 @@ export default function FinanceTrackingDashboardPage() {
                 onClick={() => router.push(`/app/incomes/${item._id}`)}
               >
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{item.title || 'Untitled'}</p>
+                  <p className="font-medium truncate flex items-center gap-2">
+                    {item.title || 'Untitled'}
+                    {item.isCancelled && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 bg-slate-500/10 px-1.5 py-0.5 rounded">Cancelled</span>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">{formatDate(item.date)} · {(item.category && (typeof item.category === 'object' ? item.category.name : item.category)) || '—'}</p>
                 </div>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400 shrink-0 ml-2">
+                <span className={`font-semibold shrink-0 ml-2 ${item.isCancelled ? 'text-muted-foreground line-through' : 'text-emerald-600 dark:text-emerald-400'}`}>
                   {formatCurrency(item.amount)}
                 </span>
               </div>
@@ -313,10 +318,15 @@ export default function FinanceTrackingDashboardPage() {
                 onClick={() => router.push(`/app/expenses/${item._id}`)}
               >
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{item.title || 'Untitled'}</p>
+                  <p className="font-medium truncate flex items-center gap-2">
+                    {item.title || 'Untitled'}
+                    {item.isCancelled && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 bg-slate-500/10 px-1.5 py-0.5 rounded">Cancelled</span>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">{formatDate(item.date)} · {(item.category && (typeof item.category === 'object' ? item.category.name : item.category)) || '—'}</p>
                 </div>
-                <span className="font-semibold text-red-600 dark:text-red-400 shrink-0 ml-2">
+                <span className={`font-semibold shrink-0 ml-2 ${item.isCancelled ? 'text-muted-foreground line-through' : 'text-red-600 dark:text-red-400'}`}>
                   {formatCurrency(item.amount)}
                 </span>
               </div>

@@ -41,12 +41,24 @@ const formatPaymentMethodLabel = (method) => {
   return String(method).replace(/[-_]/g, ' ').trim() || 'N/A';
 };
 
-const formatTransactionId = (value) => {
+const formatPaddedId = (value, minDigits = 4) => {
   if (value === null || value === undefined) return '';
   const raw = String(value).trim();
   if (!raw) return '';
-  return /^\d+$/.test(raw) ? raw.padStart(4, '0') : raw;
+  return /^\d+$/.test(raw) ? raw.padStart(minDigits, '0') : raw;
 };
+
+/** Receipt number is stored in `transactionId`. */
+const formatReceiptNumber = (payment) =>
+  payment?.transactionId != null && String(payment.transactionId).trim()
+    ? formatPaddedId(payment.transactionId, 5)
+    : '';
+
+/** Bank/gateway transaction id is stored in `paymentNumber`. */
+const formatPaymentTransactionId = (payment) =>
+  payment?.paymentNumber != null && String(payment.paymentNumber).trim()
+    ? formatPaddedId(payment.paymentNumber)
+    : '';
 
 const formatAccountTypeLabel = (t) => {
   if (!t) return '—';
@@ -600,7 +612,7 @@ export default function PaymentDetailsPage() {
     try {
       const rows = [
         ['Payment Receipt'], [],
-        ['Payment Number', payment.paymentNumber || ''],
+        ['Receipt Number', formatReceiptNumber(payment) || ''],
         ['Payment Date', formatDateForCSV(payment.paymentDate)],
         ['Amount', payment.amount || 0],
         ['Status', payment.status || ''],
@@ -654,14 +666,14 @@ export default function PaymentDetailsPage() {
         }
       }
       if (payment.referenceNumber) rows.push(['Reference Number', payment.referenceNumber]);
-      if (payment.transactionId) rows.push(['Transaction ID', formatTransactionId(payment.transactionId)]);
+      if (payment.paymentNumber) rows.push(['Transaction ID', formatPaymentTransactionId(payment)]);
       if (payment.description) rows.push(['Description', payment.description]);
 
       const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `payment-${payment.paymentNumber || paymentId}.csv`;
+      link.download = `payment-${formatReceiptNumber(payment) || paymentId}.csv`;
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -705,7 +717,7 @@ export default function PaymentDetailsPage() {
       : `<p style="color:#94a3b8;font-size:9px;margin:0">—</p>`;
 
     const detailRows = [
-      payment.transactionId && { k: 'Transaction ID', v: esc(formatTransactionId(payment.transactionId)) },
+      payment.paymentNumber && { k: 'Transaction ID', v: esc(formatPaymentTransactionId(payment)) },
       payment.chequeNumber && {
         k: 'Cheque',
         v: `${esc(payment.chequeNumber)}${payment.chequeDate ? ' · ' + formatDateForDisplay(payment.chequeDate) : ''}`,
@@ -863,7 +875,7 @@ export default function PaymentDetailsPage() {
           </div>
           <div class="pr-head-right">
             <div class="pr-doc-label">receipt</div>
-            <div class="pr-doc-num">${esc(payment.paymentNumber || 'N/A')}</div>
+            <div class="pr-doc-num">${esc(formatReceiptNumber(payment) || 'N/A')}</div>
             <span class="pr-badge ${st}">${esc(st)}</span>
           </div>
         </header>
@@ -941,7 +953,7 @@ export default function PaymentDetailsPage() {
       `<link rel="preconnect" href="https://fonts.googleapis.com">` +
       `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
       `<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">` +
-      `<title>${title} - ${(payment.paymentNumber || '').replace(/</g, '&lt;')}</title>` +
+      `<title>${title} - ${(formatReceiptNumber(payment) || '').replace(/</g, '&lt;')}</title>` +
       `<style>${RECEIPT_PRINT_STYLES}</style>${twoOnOnePageStyle}</head><body${bodyAttrs}><div class="print-container">${copiesHtml}</div></body></html>`
     );
     w.document.close();
@@ -1040,7 +1052,7 @@ export default function PaymentDetailsPage() {
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {payment.paymentNumber || 'Payment Receipt'}
+                {formatReceiptNumber(payment) || 'Payment Receipt'}
               </h1>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${sc.color}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`}></span>
@@ -1100,7 +1112,7 @@ export default function PaymentDetailsPage() {
             {/* Receipt identity */}
             <div className="flex-shrink-0 text-right">
               <p className="text-[10px] font-bold tracking-[0.15em] text-slate-400 uppercase mb-1">Receipt</p>
-              <p className="text-2xl font-bold text-slate-900 tabular-nums">{payment.paymentNumber || 'N/A'}</p>
+              <p className="text-2xl font-bold text-slate-900 tabular-nums">{formatReceiptNumber(payment) || 'N/A'}</p>
               <span className={`inline-flex items-center gap-1 mt-2 px-2.5 py-0.5 rounded-full text-[10px] font-bold border tracking-wide uppercase ${sc.color}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`}></span>
                 {payment.status}
@@ -1178,7 +1190,7 @@ export default function PaymentDetailsPage() {
                 {[
                   !hasAmountSplits && { label: 'Payment Method', value: formatPaymentMethodLabel(payment.paymentMethod) },
                   payment.referenceNumber && { label: 'Reference No.', value: payment.referenceNumber },
-                  payment.transactionId && { label: 'Transaction ID', value: formatTransactionId(payment.transactionId), mono: true },
+                  payment.paymentNumber && { label: 'Transaction ID', value: formatPaymentTransactionId(payment), mono: true },
                   payment.chequeNumber && { label: 'Cheque No.', value: payment.chequeNumber },
                   payment.chequeDate && { label: 'Cheque Date', value: formatDateForDisplay(payment.chequeDate) },
                   payment.bankName && { label: 'Bank Name', value: payment.bankName },

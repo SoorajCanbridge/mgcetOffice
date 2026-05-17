@@ -97,33 +97,36 @@ export default function FinanceTrackingReportsPage() {
     fetchData();
   }, [fetchData]);
 
+  const activeIncomes = useMemo(() => incomes.filter((i) => !i.isCancelled), [incomes]);
+  const activeExpenses = useMemo(() => expenses.filter((e) => !e.isCancelled), [expenses]);
+
   const incomeByCategory = useMemo(() => {
     const map = {};
-    incomes.forEach((i) => {
+    activeIncomes.forEach((i) => {
       const name = i.category ? (typeof i.category === 'object' ? i.category.name : i.category) : 'Uncategorized';
       map[name] = (map[name] || 0) + (Number(i.amount) || 0);
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [incomes]);
+  }, [activeIncomes]);
 
   const expenseByCategory = useMemo(() => {
     const map = {};
-    expenses.forEach((i) => {
+    activeExpenses.forEach((i) => {
       const name = i.category ? (typeof i.category === 'object' ? i.category.name : i.category) : 'Uncategorized';
       map[name] = (map[name] || 0) + (Number(i.amount) || 0);
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [expenses]);
+  }, [activeExpenses]);
 
   const accounts = Array.isArray(summary?.accounts) ? summary.accounts : [];
   const totalIncomeAmount =
     summary?.totalIncome != null && summary.totalIncome !== ''
       ? Number(summary.totalIncome)
-      : incomes.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      : activeIncomes.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const totalExpenseAmount =
     summary?.totalExpense != null && summary.totalExpense !== ''
       ? Number(summary.totalExpense)
-      : expenses.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+      : activeExpenses.reduce((s, i) => s + (Number(i.amount) || 0), 0);
   const totalAsset = (Number(summary?.totalsOpeningBalance) || 0) + totalIncomeAmount;
   const totalBalance = totalExpenseAmount + (Number(summary?.totalsClosingBalance) || 0);
 

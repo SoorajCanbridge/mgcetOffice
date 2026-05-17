@@ -92,12 +92,14 @@ const formatDateForDisplay = (date) => {
   }
 };
 
-const formatTransactionId = (value) => {
+const formatPaddedId = (value, minDigits = 4) => {
   if (value === null || value === undefined) return '';
   const raw = String(value).trim();
   if (!raw) return '';
-  return /^\d+$/.test(raw) ? raw.padStart(4, '0') : raw;
+  return /^\d+$/.test(raw) ? raw.padStart(minDigits, '0') : raw;
 };
+
+const formatReceiptNumber = (value) => formatPaddedId(value, 5);
 
 export default function PaymentsPage() {
   const router = useRouter();
@@ -414,19 +416,6 @@ export default function PaymentsPage() {
   // Define columns for Payments DataTable
   const paymentColumns = useMemo(() => [
     {
-      id: 'paymentNumber',
-      accessorKey: 'paymentNumber',
-      header: 'Payment Number',
-      type: 'text',
-      searchable: true,
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          {getStatusIcon(row.status)}
-          <span className="font-medium">{row.paymentNumber}</span>
-        </div>
-      ),
-    },
-    {
       id: 'paymentDate',
       accessorKey: 'paymentDate',
       header: 'Payment Date',
@@ -434,6 +423,21 @@ export default function PaymentsPage() {
       formatOptions: {
         locale: 'en-US',
       },
+    },
+    {
+      id: 'transactionId',
+      accessorKey: 'transactionId',
+      header: 'Receipt Number',
+      type: 'text',
+      searchable: true,
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          {getStatusIcon(row.status)}
+          <span className="font-medium font-mono tabular-nums">
+            {formatReceiptNumber(row.transactionId) || '-'}
+          </span>
+        </div>
+      ),
     },
     {
       id: 'amount',
@@ -519,19 +523,23 @@ export default function PaymentsPage() {
       },
     },
     {
+      id: 'paymentNumber',
+      accessorKey: 'paymentNumber',
+      header: 'Transaction ID',
+      type: 'text',
+      searchable: true,
+      cell: ({ row }) => (
+        <span className="font-medium font-mono tabular-nums">
+          {formatPaddedId(row.paymentNumber) || '-'}
+        </span>
+      ),
+    },
+    {
       id: 'referenceNumber',
       accessorKey: 'referenceNumber',
       header: 'Reference',
       type: 'text',
       searchable: true,
-    },
-    {
-      id: 'transactionId',
-      accessorKey: 'transactionId',
-      header: 'Transaction ID',
-      type: 'text',
-      searchable: true,
-      cell: ({ row }) => formatTransactionId(row.transactionId) || '-',
     },
     {
       id: 'category',
@@ -837,14 +845,25 @@ export default function PaymentsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">
-                Payment Number *
+                Transaction ID *
               </label>
               <Input
                 name="paymentNumber"
                 value={paymentForm.paymentNumber}
                 onChange={handleFormChange}
                 required
-                placeholder="PAY-001"
+                placeholder="Transaction ID"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Receipt Number
+              </label>
+              <Input
+                name="transactionId"
+                value={paymentForm.transactionId}
+                onChange={handleFormChange}
+                placeholder="Receipt number"
               />
             </div>
             <div>
@@ -1027,23 +1046,6 @@ export default function PaymentsPage() {
                   />
                 </div>
               </>
-            )}
-            {(paymentForm.paymentMethod === 'online' ||
-              paymentForm.paymentMethod === 'bank_transfer' ||
-              paymentForm.paymentMethod === 'upi' ||
-              paymentForm.paymentMethod === 'neft' ||
-              paymentForm.paymentMethod === 'rtgs') && (
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Transaction ID
-                </label>
-                <Input
-                  name="transactionId"
-                  value={paymentForm.transactionId}
-                  onChange={handleFormChange}
-                  placeholder="Transaction ID"
-                />
-              </div>
             )}
             <div className="md:col-span-3">
               <label className="block text-sm font-medium mb-2">

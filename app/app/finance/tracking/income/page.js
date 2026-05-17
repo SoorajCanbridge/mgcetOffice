@@ -81,6 +81,60 @@ const formatReceiptNumber = (serialNumber) => {
   return digits.padStart(5, '0').slice(-5);
 };
 
+const REQUEST_LIMIT = 200;
+const MAX_AUTO_PAGES = 50;
+
+const mergeRowsById = (rows) => {
+  const map = new Map();
+  rows.forEach((row) => {
+    if (row?._id) map.set(row._id, row);
+  });
+  return Array.from(map.values());
+};
+
+const fetchPaginatedIncomes = async (baseParams, isCancelledFilter) => {
+  const allRows = [];
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore && page <= MAX_AUTO_PAGES) {
+    const params = new URLSearchParams(baseParams);
+    if (isCancelledFilter !== undefined) params.set('isCancelled', isCancelledFilter);
+    params.set('page', String(page));
+    params.set('limit', String(REQUEST_LIMIT));
+
+    const res = await api.get(`${FINANCE_BASE}/incomes?${params.toString()}`, {}, true);
+    const payload = res?.data ?? res;
+    const pageRows = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.items)
+      ? payload.items
+      : [];
+
+    allRows.push(...pageRows);
+
+    const pagination = res?.pagination || payload?.pagination || null;
+    const currentPage = Number(pagination?.page ?? page);
+    const totalPages = Number(pagination?.pages ?? pagination?.totalPages ?? 0);
+    const nextPage = Number(pagination?.nextPage ?? 0);
+
+    const hasNextByMeta =
+      typeof pagination?.hasNextPage === 'boolean'
+        ? pagination.hasNextPage
+        : nextPage > currentPage || (totalPages > 0 && currentPage < totalPages);
+
+    const hasNextBySize = !pagination && pageRows.length === REQUEST_LIMIT;
+    hasMore = hasNextByMeta || hasNextBySize;
+
+    if (!hasMore) break;
+    page = nextPage > currentPage ? nextPage : page + 1;
+  }
+
+  return allRows;
+};
+
 const EMPTY_RECIPIENT = { name: '', phone: '', email: '', address: '' };
 
 const EMPTY_INCOME = {
@@ -112,6 +166,7 @@ export default function FinanceTrackingIncomePage() {
     search: '',
     categoryId: searchParams.get('categoryId') || '',
     accountId: '',
+    isCancelled: '',
     startDate: '',
     endDate: '',
   });
@@ -135,45 +190,15 @@ export default function FinanceTrackingIncomePage() {
       if (filters.startDate) baseParams.append('startDate', filters.startDate);
       if (filters.endDate) baseParams.append('endDate', filters.endDate);
 
-      const REQUEST_LIMIT = 200;
-      const MAX_AUTO_PAGES = 50;
-      let page = 1;
-      let hasMore = true;
-      const allRows = [];
-
-      while (hasMore && page <= MAX_AUTO_PAGES) {
-        const params = new URLSearchParams(baseParams);
-        params.set('page', String(page));
-        params.set('limit', String(REQUEST_LIMIT));
-
-        const res = await api.get(`${FINANCE_BASE}/incomes?${params.toString()}`, {}, true);
-        const payload = res?.data ?? res;
-        const pageRows = Array.isArray(payload)
-          ? payload
-          : Array.isArray(payload?.data)
-          ? payload.data
-          : Array.isArray(payload?.items)
-          ? payload.items
-          : [];
-
-        allRows.push(...pageRows);
-
-        const pagination = res?.pagination || payload?.pagination || null;
-        const currentPage = Number(pagination?.page ?? page);
-        const totalPages = Number(pagination?.pages ?? pagination?.totalPages ?? 0);
-        const nextPage = Number(pagination?.nextPage ?? 0);
-
-        const hasNextByMeta =
-          typeof pagination?.hasNextPage === 'boolean'
-            ? pagination.hasNextPage
-            : (nextPage > currentPage) || (totalPages > 0 && currentPage < totalPages);
-
-        // Fallback for APIs that do not return pagination metadata.
-        const hasNextBySize = !pagination && pageRows.length === REQUEST_LIMIT;
-        hasMore = hasNextByMeta || hasNextBySize;
-
-        if (!hasMore) break;
-        page = nextPage > currentPage ? nextPage : page + 1;
+      let allRows;
+      if (filters.isCancelled === '') {
+        const [activeRows, cancelledRows] = await Promise.all([
+          fetchPaginatedIncomes(baseParams, 'false'),
+          fetchPaginatedIncomes(baseParams, 'true'),
+        ]);
+        allRows = mergeRowsById([...activeRows, ...cancelledRows]);
+      } else {
+        allRows = await fetchPaginatedIncomes(baseParams, filters.isCancelled);
       }
 
       let list = allRows;
@@ -194,7 +219,19 @@ export default function FinanceTrackingIncomePage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.college, filters.categoryId, filters.accountId, filters.startDate, filters.endDate, filters.search]);
+  }, [user?.college, filters.categoryId, filters.accountId, filters.isCancelled, filters.startDate, filters.endDate, filters.search]);
+
+  const summary = useMemo(() => {
+    const active = incomes.filter((i) => !i.isCancelled);
+    const cancelled = incomes.filter((i) => i.isCancelled);
+    return {
+      activeTotal: active.reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
+      cancelledTotal: cancelled.reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
+      activeCount: active.length,
+      cancelledCount: cancelled.length,
+      totalCount: incomes.length,
+    };
+  }, [incomes]);
 
   const fetchCategories = useCallback(async () => {
     if (!user?.college) return;
@@ -343,12 +380,13 @@ export default function FinanceTrackingIncomePage() {
   };
 
   const exportCsv = () => {
-    const headers = ['Receipt Number', 'Title', 'Amount', 'Date', 'Category', 'Account', 'Recipient', 'Reference', 'Notes'];
+    const headers = ['Receipt Number', 'Title', 'Amount', 'Date', 'Status', 'Category', 'Account', 'Recipient', 'Reference', 'Notes'];
     const rows = incomes.map((i) => [
       formatReceiptNumber(i.serialNumber),
       i.title || '',
       i.amount ?? '',
       i.date ? new Date(i.date).toISOString().split('T')[0] : '',
+      i.isCancelled ? 'Cancelled' : 'Active',
       (i.category && (typeof i.category === 'object' ? i.category.name : i.category)) || '',
       (i.account && (typeof i.account === 'object' ? i.account.name : i.account)) || '',
       (i.recipient && typeof i.recipient === 'object' ? i.recipient.name : '') || '',
@@ -377,10 +415,46 @@ export default function FinanceTrackingIncomePage() {
       { id: 'title', accessorKey: 'title', header: 'Title', type: 'text', searchable: true, cell: ({ row }) => (
         <span className="flex items-center gap-2">
           <span className="font-medium">{row.title || 'Untitled'}</span>
-          {row.isCancelled && <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">Cancelled</span>}
+          {row.isCancelled && (
+            <span className="rounded bg-slate-500/10 px-1.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">Cancelled</span>
+          )}
         </span>
       ) },
-      { id: 'amount', accessorKey: 'amount', header: 'Amount', type: 'currency', formatOptions: { locale: 'en-IN', currency: 'INR' }, cell: ({ row }) => <span className="text-emerald-600 font-medium">{formatCurrency(row.amount)}</span> },
+      {
+        id: 'status',
+        accessorKey: 'isCancelled',
+        header: 'Status',
+        type: 'text',
+        cell: ({ row }) => (
+          <span
+            className={`text-xs px-2 py-1 rounded font-medium ${
+              row.isCancelled
+                ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
+                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            }`}
+          >
+            {row.isCancelled ? 'Cancelled' : 'Active'}
+          </span>
+        ),
+      },
+      {
+        id: 'amount',
+        accessorKey: 'amount',
+        header: 'Amount',
+        type: 'currency',
+        formatOptions: { locale: 'en-IN', currency: 'INR' },
+        cell: ({ row }) => (
+          <span
+            className={`font-medium ${
+              row.isCancelled
+                ? 'text-muted-foreground line-through'
+                : 'text-emerald-600'
+            }`}
+          >
+            {formatCurrency(row.amount)}
+          </span>
+        ),
+      },
       {
         id: 'date',
         accessorKey: 'date',
@@ -478,13 +552,33 @@ export default function FinanceTrackingIncomePage() {
       {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
       {success && <div className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600 dark:text-emerald-400">{success}</div>}
 
+      {!loading && incomes.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="text-sm text-muted-foreground">Active income</div>
+            <div className="text-2xl font-bold text-emerald-600">{formatCurrency(summary.activeTotal)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{summary.activeCount} records</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="text-sm text-muted-foreground">Cancelled</div>
+            <div className="text-2xl font-bold text-slate-600">{formatCurrency(summary.cancelledTotal)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{summary.cancelledCount} records</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="text-sm text-muted-foreground">Total listed</div>
+            <div className="text-2xl font-bold">{formatCurrency(summary.activeTotal + summary.cancelledTotal)}</div>
+            <div className="text-xs text-muted-foreground mt-1">{summary.totalCount} records</div>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">Filters</span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search..." value={filters.search} onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))} className="pl-8 h-9" />
@@ -496,6 +590,15 @@ export default function FinanceTrackingIncomePage() {
           <select className="h-9 rounded-md border border-input bg-background px-3 text-sm" value={filters.accountId} onChange={(e) => setFilters((p) => ({ ...p, accountId: e.target.value }))}>
             <option value="">All accounts</option>
             {accounts.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
+          </select>
+          <select
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            value={filters.isCancelled}
+            onChange={(e) => setFilters((p) => ({ ...p, isCancelled: e.target.value }))}
+          >
+            <option value="">All statuses</option>
+            <option value="false">Active</option>
+            <option value="true">Cancelled</option>
           </select>
           <Input type="date" className="h-9" value={filters.startDate} onChange={(e) => setFilters((p) => ({ ...p, startDate: e.target.value }))} />
           <Input type="date" className="h-9" value={filters.endDate} onChange={(e) => setFilters((p) => ({ ...p, endDate: e.target.value }))} />
