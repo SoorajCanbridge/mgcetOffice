@@ -5,3 +5,8 @@ export { StudentStatsBlock } from './StudentStatsBlock';
 export { SimpleBarChart } from './SimpleBarChart';
 export { AnalyticsInsightCard } from './AnalyticsInsightCard';
 export { AnalyticsStrip } from './AnalyticsStrip';
+export { Sparkline } from './Sparkline';
+export { DonutChart } from './DonutChart';
+export { GroupedBarChart } from './GroupedBarChart';
+export { ProgressRing } from './ProgressRing';
+export { DashboardSection } from './DashboardSection';

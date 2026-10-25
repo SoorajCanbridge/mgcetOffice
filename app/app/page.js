@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  LayoutDashboard,
   BookOpen,
   Users,
   FileText,
@@ -13,22 +12,61 @@ import {
   RefreshCcw,
   Activity,
   GraduationCap,
-  TrendingUp,
   ArrowRight,
-  Sparkles,
+  UserPlus,
+  Receipt,
+  Briefcase,
+  Clock,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAccess } from '@/lib/rbac';
+import { api } from '@/lib/api';
 import { getAnalyticsSummary, getCourseStudentAnalytics } from '@/lib/analytics-api';
+import {
+  formatNumber,
+  formatPercent,
+  formatPeriodKey,
+  sortByPeriod,
+  delta,
+  greetingForHour,
+  seriesFromDocs,
+  buildInsights,
+} from '@/lib/analytics-format';
 import {
   AnalyticsStatCard,
   PeriodSelector,
   CourseStatsBlock,
   StudentStatsBlock,
-  SimpleBarChart,
   AnalyticsInsightCard,
+  DonutChart,
+  GroupedBarChart,
+  ProgressRing,
+  DashboardSection,
 } from '@/components/analytics';
-import { Skeleton } from '@/components/ui/skeleton';
+
+const STUDENT_MIX = [
+  { key: 'active', label: 'Active', stroke: '#10b981' },
+  { key: 'graduated', label: 'Graduated', stroke: '#8b5cf6' },
+  { key: 'dropped', label: 'Dropped', stroke: '#ef4444' },
+  { key: 'suspended', label: 'Suspended', stroke: '#f59e0b' },
+  { key: 'transferred', label: 'Transferred', stroke: '#64748b' },
+];
+
+const formatCurrency = (value) => {
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+    }).format(Number(value) || 0);
+  } catch {
+    return `₹${formatNumber(value)}`;
+  }
+};
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -37,136 +75,218 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [summaryData, setSummaryData] = useState([]);
   const [totalDoc, setTotalDoc] = useState(null);
+  const [finance, setFinance] = useState(null);
 
   const collegeId = user?.college;
+  const showFinance = canAccess(user, 'finance', 'view');
+  const displayName = (user?.name || user?.username || user?.email || 'there').split(' ')[0];
 
   const fetchAnalytics = useCallback(async () => {
     if (!collegeId) return;
     setError('');
     setLoading(true);
     try {
-      const [summaryRes, totalRes] = await Promise.all([
+      const requests = [
         getAnalyticsSummary(collegeId, { periodType }).catch(() => ({ data: [] })),
         getCourseStudentAnalytics(collegeId, { periodType: 'total', periodKey: 'all' }).catch(() => ({ data: [] })),
-      ]);
+      ];
+      if (showFinance) {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const end = now.toISOString().split('T')[0];
+        requests.push(
+          api
+            .get(`/finance/summary?startDate=${start}&endDate=${end}`, {}, true)
+            .catch(() => null)
+        );
+      }
+      const [summaryRes, totalRes, financeRes] = await Promise.all(requests);
       const list = Array.isArray(summaryRes?.data) ? summaryRes.data : [];
       setSummaryData(list);
       const totalList = Array.isArray(totalRes?.data) ? totalRes.data : [];
       setTotalDoc(totalList.length ? totalList[0] : null);
+      if (showFinance) {
+        setFinance(financeRes?.data ?? financeRes ?? null);
+      }
     } catch (err) {
-      setError(err?.message || 'Failed to load analytics');
+      setError(err?.message || 'Failed to load dashboard');
     } finally {
       setLoading(false);
     }
-  }, [collegeId, periodType]);
+  }, [collegeId, periodType, showFinance]);
 
   useEffect(() => {
     if (!collegeId) return;
     fetchAnalytics();
   }, [collegeId, fetchAnalytics]);
 
-  const latestPeriod = useMemo(() => {
-    if (!summaryData.length) return null;
-    const sorted = [...summaryData].sort((a, b) => new Date(b.periodStart || 0) - new Date(a.periodStart || 0));
-    return sorted[0];
-  }, [summaryData]);
+  const sortedPeriods = useMemo(() => sortByPeriod(summaryData, 'asc'), [summaryData]);
+  const latestPeriod = sortedPeriods.length ? sortedPeriods[sortedPeriods.length - 1] : null;
+  const previousPeriod = sortedPeriods.length > 1 ? sortedPeriods[sortedPeriods.length - 2] : null;
 
   const courseStats = latestPeriod?.course ?? totalDoc?.course ?? {};
   const studentStats = latestPeriod?.student ?? totalDoc?.student ?? {};
+  const prevCourse = previousPeriod?.course ?? {};
+  const prevStudent = previousPeriod?.student ?? {};
+
+  const periodLabel = latestPeriod
+    ? formatPeriodKey(latestPeriod)
+    : periodType === 'total'
+      ? 'All time'
+      : 'Current period';
 
   const kpiCards = useMemo(() => {
-    const activeStudents = studentStats.active ?? 0;
-    const totalEnrolled = courseStats.totalEnrolled ?? 0;
-    const completed = courseStats.completed ?? 0;
-    const activeCourses = courseStats.active ?? 0;
+    const compare = periodType !== 'total' && previousPeriod;
     return [
       {
-        label: 'Active Students',
-        value: activeStudents,
+        label: 'Active students',
+        value: studentStats.active ?? 0,
         icon: Users,
         color: 'text-blue-600 dark:text-blue-400',
         bg: 'bg-blue-500/10',
-        border: 'border-blue-500/20',
+        href: '/app/students',
+        delta: compare ? delta(studentStats.active, prevStudent.active) : undefined,
+        sparkline: seriesFromDocs(sortedPeriods, (d) => d.student?.active),
+        subLabel: compare ? `vs ${formatPeriodKey(previousPeriod)}` : 'Lifetime snapshot when period is empty',
       },
       {
-        label: 'Total Enrolled',
-        value: totalEnrolled,
+        label: 'Total enrolled',
+        value: courseStats.totalEnrolled ?? 0,
         icon: GraduationCap,
         color: 'text-emerald-600 dark:text-emerald-400',
         bg: 'bg-emerald-500/10',
-        border: 'border-emerald-500/20',
+        href: '/app/students',
+        delta: compare ? delta(courseStats.totalEnrolled, prevCourse.totalEnrolled) : undefined,
+        sparkline: seriesFromDocs(sortedPeriods, (d) => d.course?.totalEnrolled),
+        subLabel: 'Course enrolments',
       },
       {
-        label: 'Courses Completed',
-        value: completed,
+        label: 'Courses completed',
+        value: courseStats.completed ?? 0,
         icon: BookOpen,
         color: 'text-violet-600 dark:text-violet-400',
         bg: 'bg-violet-500/10',
-        border: 'border-violet-500/20',
+        href: '/app/courses',
+        delta: compare ? delta(courseStats.completed, prevCourse.completed) : undefined,
+        sparkline: seriesFromDocs(sortedPeriods, (d) => d.course?.completed),
+        subLabel: 'Finished in view',
       },
       {
-        label: 'Active Courses',
-        value: activeCourses,
+        label: 'Active courses',
+        value: courseStats.active ?? 0,
         icon: Activity,
-        color: 'text-primary',
-        bg: 'bg-primary/10',
-        border: 'border-primary/20',
+        color: 'text-sky-600 dark:text-sky-400',
+        bg: 'bg-sky-500/10',
+        href: '/app/courses',
+        delta: compare ? delta(courseStats.active, prevCourse.active) : undefined,
+        sparkline: seriesFromDocs(sortedPeriods, (d) => d.course?.active),
+        subLabel: 'Running batches',
       },
     ];
-  }, [studentStats.active, courseStats.totalEnrolled, courseStats.completed, courseStats.active]);
+  }, [studentStats, courseStats, prevStudent, prevCourse, previousPeriod, periodType, sortedPeriods]);
 
-  const studentChartData = useMemo(() => {
-    const total = studentStats.enrolled ?? 0;
-    if (total === 0) return [];
+  const studentMix = useMemo(
+    () =>
+      STUDENT_MIX.map((item) => ({
+        label: item.label,
+        value: studentStats[item.key] ?? 0,
+        stroke: item.stroke,
+      })).filter((d) => d.value > 0),
+    [studentStats]
+  );
+
+  const trendCategories = useMemo(
+    () => sortedPeriods.slice(-8).map((d) => formatPeriodKey(d)),
+    [sortedPeriods]
+  );
+  const trendSeries = useMemo(() => {
+    const slice = sortedPeriods.slice(-8);
     return [
-      { label: 'Active', value: studentStats.active ?? 0, color: 'bg-emerald-500' },
-      { label: 'Graduated', value: studentStats.graduated ?? 0, color: 'bg-violet-500' },
-      { label: 'Dropped', value: studentStats.dropped ?? 0, color: 'bg-red-500' },
-      { label: 'Suspended', value: studentStats.suspended ?? 0, color: 'bg-amber-500' },
-      { label: 'Transferred', value: studentStats.transferred ?? 0, color: 'bg-slate-500' },
-    ].filter((d) => d.value > 0);
-  }, [studentStats]);
+      { name: 'Active students', color: '#2563eb', values: slice.map((d) => d.student?.active ?? 0) },
+      { name: 'Enrolled', color: '#10b981', values: slice.map((d) => d.course?.totalEnrolled ?? 0) },
+      { name: 'Active courses', color: '#8b5cf6', values: slice.map((d) => d.course?.active ?? 0) },
+    ];
+  }, [sortedPeriods]);
 
-  const completionRate = useMemo(() => {
-    const total = courseStats.totalEnrolled ?? 0;
-    const completed = courseStats.completed ?? 0;
-    if (total === 0) return null;
-    return Math.round((completed / total) * 100);
-  }, [courseStats.totalEnrolled, courseStats.completed]);
+  const completionRate = formatPercent(courseStats.completed, courseStats.totalEnrolled);
+  const retentionRate = formatPercent(studentStats.active, studentStats.enrolled || courseStats.totalEnrolled);
+  const dropoutRate = formatPercent(studentStats.dropped, studentStats.enrolled || courseStats.totalEnrolled);
+
+  const insights = useMemo(
+    () =>
+      buildInsights({
+        course: courseStats,
+        student: studentStats,
+        previousCourse: prevCourse,
+        previousStudent: prevStudent,
+      }),
+    [courseStats, studentStats, prevCourse, prevStudent]
+  );
+
+  const recentRows = useMemo(() => sortByPeriod(summaryData, 'desc').slice(0, 6), [summaryData]);
 
   const quickLinks = [
-    { title: 'Analytics', href: '/app/analytics', icon: BarChart3, description: 'Full analytics & insights' },
-    { title: 'Students', href: '/app/students', icon: Users, description: 'Manage students' },
-    { title: 'Courses', href: '/app/courses', icon: BookOpen, description: 'Manage courses' },
-    { title: 'Finance', href: '/app/finance/tracking', icon: Wallet, description: 'Income & expenses' },
-    { title: 'Invoices', href: '/app/invoices', icon: FileText, description: 'Invoicing' },
-  ];
+    { title: 'Add student', href: '/app/students', icon: UserPlus, description: 'Enrol a new student' },
+    { title: 'Courses', href: '/app/courses', icon: BookOpen, description: 'Manage academic batches' },
+    { title: 'Invoices', href: '/app/invoices', icon: Receipt, description: 'Fees and billing' },
+    { title: 'Finance', href: '/app/finance/tracking', icon: Wallet, description: 'Income and expenses' },
+    { title: 'Staff', href: '/app/staff', icon: Briefcase, description: 'People and payroll' },
+    { title: 'Attendance', href: '/app/staff-attendance', icon: Clock, description: 'Daily attendance' },
+    { title: 'Analytics', href: '/app/analytics', icon: BarChart3, description: 'Full reports' },
+    { title: 'Documents', href: '/app/invoices', icon: FileText, description: 'Invoices and receipts' },
+  ].filter((link) => {
+    if (link.href.startsWith('/app/finance')) return canAccess(user, 'finance', 'view');
+    if (link.href.startsWith('/app/staff-attendance')) return canAccess(user, 'attendance', 'view');
+    if (link.href.startsWith('/app/staff')) return canAccess(user, 'staff', 'view');
+    if (link.href.startsWith('/app/invoices')) return canAccess(user, 'invoice', 'view') || canAccess(user, 'fees', 'view');
+    if (link.href.startsWith('/app/students')) return canAccess(user, 'students', 'view');
+    if (link.href.startsWith('/app/courses')) return canAccess(user, 'academic', 'view');
+    return true;
+  });
+
+  const hasData = Boolean(latestPeriod || totalDoc);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <LayoutDashboard className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              Overview of courses, students, and key metrics
+    <div className="max-w-[1400px] mx-auto space-y-5 sm:space-y-6">
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-blue-600 via-indigo-600 to-slate-900 text-white p-5 sm:p-7 shadow-sm">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-20 right-10 h-40 w-40 rounded-full bg-sky-400/20 blur-2xl" />
+        <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+          <div className="min-w-0">
+            <p className="text-sm text-white/70">{greetingForHour()}</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mt-0.5">
+              {displayName}, here is your operations snapshot
+            </h1>
+            <p className="text-sm text-white/75 mt-2 max-w-xl">
+              Course, student, and finance signals for {periodLabel.toLowerCase()}. Switch the period to compare trends.
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <PeriodSelector value={periodType} onChange={setPeriodType} />
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={fetchAnalytics}
-            disabled={loading}
-            title="Refresh"
-          >
-            <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <PeriodSelector value={periodType} onChange={setPeriodType} tone="inverse" />
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-white text-slate-900 hover:bg-white/90"
+                asChild
+              >
+                <Link href="/app/analytics">
+                  Open analytics
+                  <ArrowRight className="h-4 w-4 ml-1.5" />
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                onClick={fetchAnalytics}
+                disabled={loading}
+                title="Refresh"
+              >
+                <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -176,127 +296,262 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading && !totalDoc && !latestPeriod ? (
-          [...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-28 rounded-xl" />
-          ))
-        ) : (
-          kpiCards.map((card) => (
-            <AnalyticsStatCard
-              key={card.label}
-              label={card.label}
-              value={card.value}
-              icon={card.icon}
-              color={card.color}
-              bg={card.bg}
-              border={card.border}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+        {loading && !hasData
+          ? [...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)
+          : kpiCards.map((card) => <AnalyticsStatCard key={card.label} {...card} />)}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+        <DashboardSection title="Completion" description="Completed vs enrolled" className="md:col-span-1">
+          {loading && !hasData ? (
+            <Skeleton className="h-20" />
+          ) : (
+            <ProgressRing
+              value={completionRate ?? 0}
+              label={
+                <div>
+                  <p className="text-foreground font-medium">Course completion</p>
+                  <p>
+                    {formatNumber(courseStats.completed ?? 0)} of {formatNumber(courseStats.totalEnrolled ?? 0)}
+                  </p>
+                </div>
+              }
+              color="#8b5cf6"
             />
-          ))
+          )}
+        </DashboardSection>
+        <DashboardSection title="Retention" description="Students still active" className="md:col-span-1">
+          {loading && !hasData ? (
+            <Skeleton className="h-20" />
+          ) : (
+            <ProgressRing
+              value={retentionRate ?? 0}
+              label={
+                <div>
+                  <p className="text-foreground font-medium">Active retention</p>
+                  <p>{formatNumber(studentStats.active ?? 0)} currently active</p>
+                </div>
+              }
+              color="#10b981"
+            />
+          )}
+        </DashboardSection>
+        <DashboardSection title="Risk" description="Dropped students" className="md:col-span-1">
+          {loading && !hasData ? (
+            <Skeleton className="h-20" />
+          ) : (
+            <ProgressRing
+              value={dropoutRate ?? 0}
+              label={
+                <div>
+                  <p className="text-foreground font-medium">Dropout rate</p>
+                  <p>{formatNumber(studentStats.dropped ?? 0)} dropped in this view</p>
+                </div>
+              }
+              color="#ef4444"
+            />
+          )}
+        </DashboardSection>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 sm:gap-5">
+        <DashboardSection
+          title="Performance trend"
+          description="Last 8 periods"
+          icon={BarChart3}
+          className="xl:col-span-3"
+        >
+          {loading && !hasData ? (
+            <Skeleton className="h-52" />
+          ) : trendCategories.length ? (
+            <GroupedBarChart categories={trendCategories} series={trendSeries} height={220} />
+          ) : (
+            <p className="text-sm text-muted-foreground py-8 text-center">No period trend yet. Rebuild totals from Analytics.</p>
+          )}
+        </DashboardSection>
+        <DashboardSection
+          title="Student mix"
+          description="Status distribution"
+          icon={Users}
+          className="xl:col-span-2"
+        >
+          {loading && !hasData ? (
+            <Skeleton className="h-52" />
+          ) : (
+            <DonutChart data={studentMix} centerLabel="in mix" size={156} />
+          )}
+        </DashboardSection>
+      </div>
+
+      {insights.length > 0 && !loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+          {insights.map((item) => (
+            <AnalyticsInsightCard
+              key={item.id}
+              title={item.title}
+              description={item.description}
+              value={item.value}
+              variant={item.variant}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+        <DashboardSection
+          title="Course statistics"
+          description={`Breakdown for ${periodLabel}`}
+          icon={BookOpen}
+          action={
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/app/analytics" className="gap-1">
+                Details <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          }
+        >
+          <CourseStatsBlock course={courseStats} loading={loading && !hasData} compact hideTitle />
+        </DashboardSection>
+        <DashboardSection
+          title="Student statistics"
+          description={`Breakdown for ${periodLabel}`}
+          icon={Users}
+          action={
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/app/analytics" className="gap-1">
+                Details <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          }
+        >
+          <StudentStatsBlock student={studentStats} loading={loading && !hasData} compact hideTitle />
+        </DashboardSection>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 sm:gap-5">
+        <DashboardSection
+          title="Recent periods"
+          description="Latest summary records"
+          icon={Activity}
+          className="xl:col-span-3"
+        >
+          {loading && !hasData ? (
+            <Skeleton className="h-40" />
+          ) : recentRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No period records yet.</p>
+          ) : (
+            <div className="-mx-4 sm:-mx-5 overflow-x-auto">
+              <table className="w-full text-sm min-w-[520px]">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="text-left font-medium px-4 sm:px-5 py-2">Period</th>
+                    <th className="text-right font-medium px-4 py-2">Students</th>
+                    <th className="text-right font-medium px-4 py-2">Enrolled</th>
+                    <th className="text-right font-medium px-4 py-2">Courses</th>
+                    <th className="text-right font-medium px-4 sm:px-5 py-2">Completed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentRows.map((doc, i) => (
+                    <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/40">
+                      <td className="px-4 sm:px-5 py-2.5 font-medium">{formatPeriodKey(doc)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{formatNumber(doc.student?.active ?? 0)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{formatNumber(doc.course?.totalEnrolled ?? 0)}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{formatNumber(doc.course?.active ?? 0)}</td>
+                      <td className="px-4 sm:px-5 py-2.5 text-right tabular-nums">{formatNumber(doc.course?.completed ?? 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </DashboardSection>
+
+        {showFinance ? (
+          <DashboardSection
+            title="Finance this month"
+            description="Income vs expense"
+            icon={Wallet}
+            className="xl:col-span-2"
+            action={
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/app/finance/tracking" className="gap-1">
+                  Open <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            }
+          >
+            {loading && !finance ? (
+              <Skeleton className="h-36" />
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-3 py-2.5">
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <TrendingUp className="h-4 w-4 text-emerald-600" /> Income
+                  </span>
+                  <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                    {formatCurrency(finance?.totalIncome)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg bg-red-500/10 px-3 py-2.5">
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <TrendingDown className="h-4 w-4 text-red-600" /> Expense
+                  </span>
+                  <span className="font-semibold tabular-nums text-red-700 dark:text-red-400">
+                    {formatCurrency(finance?.totalExpense)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+                  <span className="text-sm text-muted-foreground">Net position</span>
+                  <span
+                    className={`font-semibold tabular-nums ${(finance?.net ?? 0) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}
+                  >
+                    {formatCurrency(finance?.net)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </DashboardSection>
+        ) : (
+          <DashboardSection title="Shortcuts" description="Jump into daily work" className="xl:col-span-2">
+            <div className="grid grid-cols-1 gap-1">
+              {quickLinks.slice(0, 4).map((link) => (
+                <Link
+                  key={link.href + link.title}
+                  href={link.href}
+                  className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/60"
+                >
+                  <link.icon className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium">{link.title}</span>
+                  <ChevronRight className="h-4 w-4 ml-auto text-muted-foreground" />
+                </Link>
+              ))}
+            </div>
+          </DashboardSection>
         )}
       </div>
 
-      {/* Insights row */}
-      {(completionRate != null || studentChartData.length > 0) && !loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {completionRate != null && (
-            <AnalyticsInsightCard
-              title="Course completion rate"
-              description="Completed vs total enrolled (all time)"
-              value={`${completionRate}%`}
-              variant="success"
-              icon={TrendingUp}
-            />
-          )}
-          {studentStats.active != null && (
-            <AnalyticsInsightCard
-              title="Currently active students"
-              description="Students in active status"
-              value={studentStats.active}
-              variant="info"
-            />
-          )}
-        </div>
-      )}
-
-      {/* Course & Student stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
-            <h2 className="font-semibold flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-primary" />
-              Course statistics
-            </h2>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/app/analytics" className="gap-1">
-                View details <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-          <div className="p-4">
-            <CourseStatsBlock course={courseStats} loading={loading} compact />
-          </div>
-        </div>
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              Student statistics
-            </h2>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/app/analytics" className="gap-1">
-                View details <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-          <div className="p-4">
-            <StudentStatsBlock student={studentStats} loading={loading} compact />
-          </div>
-        </div>
-      </div>
-
-      {/* Student distribution chart */}
-      {studentChartData.length > 0 && !loading && (
-        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-          <div className="px-4 py-3 border-b border-border bg-muted/30">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-amber-500" />
-              Student distribution
-            </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">By status</p>
-          </div>
-          <div className="p-4 max-w-md">
-            <SimpleBarChart data={studentChartData} showValues />
-          </div>
-        </div>
-      )}
-
-      {/* Quick links */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
-        <div className="px-4 py-3 border-b border-border bg-muted/30">
-          <h2 className="font-semibold">Quick actions</h2>
-          <p className="text-sm text-muted-foreground">Jump to key sections</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 divide-y md:divide-y-0 md:divide-x divide-border">
+      <DashboardSection title="Quick actions" description="Common destinations across the campus office">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           {quickLinks.map((link) => (
             <Link
-              key={link.href}
+              key={link.href + link.title}
               href={link.href}
-              className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
+              className="flex items-center gap-3 rounded-lg border border-transparent p-3 hover:border-border hover:bg-muted/50 transition-colors"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
                 <link.icon className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-medium">{link.title}</p>
-                <p className="text-sm text-muted-foreground truncate">{link.description}</p>
+                <p className="font-medium text-sm">{link.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{link.description}</p>
               </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
             </Link>
           ))}
         </div>
-      </div>
+      </DashboardSection>
     </div>
   );
 }

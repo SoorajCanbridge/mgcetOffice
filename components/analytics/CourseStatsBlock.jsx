@@ -12,14 +12,16 @@ const COURSE_FIELDS = [
   { key: 'totalEnrolled', label: 'Total Enrolled', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
 ];
 
-export function CourseStatsBlock({ course = {}, loading, compact, className }) {
+export function CourseStatsBlock({ course = {}, loading, compact, hideTitle, className }) {
   if (loading) {
     return (
       <div className={cn('space-y-3', className)}>
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <BookOpen className="h-4 w-4" />
-          Course stats
-        </div>
+        {!hideTitle && (
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <BookOpen className="h-4 w-4" />
+            Course stats
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
           {COURSE_FIELDS.map(({ key }) => (
             <Skeleton key={key} className="h-14 rounded-lg" />
@@ -31,10 +33,12 @@ export function CourseStatsBlock({ course = {}, loading, compact, className }) {
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <BookOpen className="h-4 w-4" />
-        Course stats
-      </div>
+      {!hideTitle && (
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <BookOpen className="h-4 w-4" />
+          Course stats
+        </div>
+      )}
       <div className={cn(
         'grid gap-2',
         compact ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'

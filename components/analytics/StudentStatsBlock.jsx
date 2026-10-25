@@ -13,14 +13,16 @@ const STUDENT_FIELDS = [
   { key: 'active', label: 'Active', icon: UserCheck, color: 'text-primary', bg: 'bg-primary/10' },
 ];
 
-export function StudentStatsBlock({ student = {}, loading, compact, className }) {
+export function StudentStatsBlock({ student = {}, loading, compact, hideTitle, className }) {
   if (loading) {
     return (
       <div className={cn('space-y-3', className)}>
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Users className="h-4 w-4" />
-          Student stats
-        </div>
+        {!hideTitle && (
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Users className="h-4 w-4" />
+            Student stats
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
           {STUDENT_FIELDS.map(({ key }) => (
             <Skeleton key={key} className="h-14 rounded-lg" />
@@ -32,10 +34,12 @@ export function StudentStatsBlock({ student = {}, loading, compact, className })
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <Users className="h-4 w-4" />
-        Student stats
-      </div>
+      {!hideTitle && (
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Users className="h-4 w-4" />
+          Student stats
+        </div>
+      )}
       <div className={cn(
         'grid gap-2',
         compact ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
