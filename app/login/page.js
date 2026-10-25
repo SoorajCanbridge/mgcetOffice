@@ -85,7 +85,7 @@ export default function LoginPage() {
           {/* Left / brand side */}
           <div className="space-y-6 text-left text-slate-100">
             <p className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-200/80 shadow-sm backdrop-blur">
-              Ready to manage smarter
+              Ready to manage smarter . v3
             </p>
             <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
               <span className="bg-gradient-to-r from-indigo-300 via-sky-300 to-emerald-300 bg-clip-text text-transparent">
